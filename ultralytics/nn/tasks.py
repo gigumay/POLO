@@ -360,8 +360,8 @@ class LocalizationModel(BaseModel):
         self.inplace = self.yaml.get("inplace", True)
 
         # Build strides
-        m = self.model[-1]  # Detect()
-        if isinstance(m, Detect):  # includes all Detect subclasses like Segment, Pose, OBB, WorldDetect
+        m = self.model[-1]  # Locate()
+        if isinstance(m, Locate):
             s = 256  # 2x min stride
             m.inplace = self.inplace
             forward = lambda x: self.forward(x)[0] if isinstance(m, (Segment, Pose, OBB)) else self.forward(x)
