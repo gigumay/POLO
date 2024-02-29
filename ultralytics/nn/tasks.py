@@ -36,13 +36,14 @@ from ultralytics.nn.modules import (
     GhostConv,
     HGBlock,
     HGStem,
+    Locate,
     Pose,
     RepC3,
     RepConv,
     ResNetLayer,
     RTDETRDecoder,
     Segment,
-    WorldDetect,
+    WorldDetect
 )
 from ultralytics.utils import DEFAULT_CFG_DICT, DEFAULT_CFG_KEYS, LOGGER, colorstr, emojis, yaml_load
 from ultralytics.utils.checks import check_requirements, check_suffix, check_yaml
@@ -345,7 +346,7 @@ class LocalizationModel(BaseModel):
     """YOLOv8 localization model."""
 
     def __init__(self, cfg="yolov8n-loc.yaml", ch=3, nc=None, verbose=True):  # model, input channels, number of classes
-        """Initialize the YOLOv8 detection model with the given config and parameters."""
+        """Initialize the YOLOv8 localization model with the given config and parameters."""
         super().__init__()
         self.yaml = cfg if isinstance(cfg, dict) else yaml_model_load(cfg)  # cfg dict
 
@@ -1077,6 +1078,8 @@ def guess_model_task(model):
                 return "obb"
             elif isinstance(m, (Detect, WorldDetect)):
                 return "detect"
+            elif isinstance(m, Locate):
+                return "locate"
 
     # Guess from model filename
     if isinstance(model, (str, Path)):
@@ -1089,6 +1092,8 @@ def guess_model_task(model):
             return "pose"
         elif "-obb" in model.stem or "obb" in model.parts:
             return "obb"
+        elif "-loc" in model.stem or "locate" in model.parts:
+            return "locate"
         elif "detect" in model.parts:
             return "detect"
 

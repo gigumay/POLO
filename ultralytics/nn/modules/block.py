@@ -10,6 +10,7 @@ from .transformer import TransformerBlock
 
 __all__ = (
     "DFL",
+    "LocInf",
     "HGBlock",
     "HGStem",
     "SPP",
@@ -55,6 +56,36 @@ class DFL(nn.Module):
         return self.conv(x.view(b, 4, self.c1, a).transpose(2, 1).softmax(1)).view(b, 4, a)
         # return self.conv(x.view(b, self.c1, 4, a).softmax(1)).view(b, 4, a)
 
+
+class LocInf(nn.Module):
+    """
+    Module for localization inference. Computes a weighted average across 
+    scales. Adjusted from DFL lass. The intuition behind this is a bit unclear
+    """
+
+    def __init__(self, c1=16):
+        """Initialize a convolutional layer with a given number of input channels."""
+        super().__init__()
+        self.conv = nn.Conv2d(c1, 1, 1, bias=False).requires_grad_(False)
+        x = torch.arange(c1, dtype=torch.float)
+        # weighted sum -> intuition? 
+        self.conv.weight.data[:] = nn.Parameter(x.view(1, c1, 1, 1))
+        self.c1 = c1
+
+    def forward(self, x):
+        """Applies a transformer layer on input tensor 'x' and returns a tensor."""
+        b, c, a = x.shape  # batch, channels (reg_max*2), anchors
+        '''
+        x.view(b, 2, self.c1, a) -> [b, 2, c1, n_anchors]
+        transpose(2,1) -> [b, c1, 2, n_anchors]
+        softmax(1) -> [b, c1, 2, n_anchors]
+        view(b, 2, a) -> [b, 2, n_anchors] (after convolution)
+        '''
+        sftmx = x.view(b, 2, self.c1, a).transpose(2, 1).softmax(1)     # softmax
+        
+        # multiply softmax by two and subtract one to allow for negative outputs
+        return self.conv((sftmx * 2) - 1).view(b, 2, a)               
+        # return self.conv(x.view(b, self.c1, 4, a).softmax(1)).view(b, 4, a)
 
 class Proto(nn.Module):
     """YOLOv8 mask Proto module for segmentation models."""

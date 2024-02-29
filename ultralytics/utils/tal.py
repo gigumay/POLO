@@ -342,3 +342,8 @@ def dist2rbox(pred_dist, pred_angle, anchor_points, dim=-1):
     x, y = xf * cos - yf * sin, xf * sin + yf * cos
     xy = torch.cat([x, y], dim=dim) + anchor_points
     return torch.cat([xy, lt + rb], dim=dim)
+
+def dist2coords(distance, anchor_points, dim=-1):
+    """Transform distance to coordinates."""
+    center_coords = anchor_points + distance
+    return center_coords
