@@ -40,7 +40,7 @@ class YOLO(Model):
             },
             "locate": {
                 "model": LocalizationModel,
-                "trainer": yolo.detect.DetectionTrainer,
+                "trainer": yolo.locate.LocalizationTrainer,
                 "validator": yolo.detect.DetectionValidator,
                 "predictor": yolo.detect.DetectionPredictor,
             },
