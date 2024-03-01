@@ -403,33 +403,33 @@ class ConfusionMatrix:
                 if not any(m1 == i):
                     self.matrix[dc, self.nc] += 1  # predicted background
 
-    def process_batch_loc(self, locations, gt_locs, gt_cls):
+    def process_batch_loc(self, localizations, gt_locs, gt_cls):
         """
         Update confusion matrix for localization task.
 
         Args:
-            locations (Array[M, 4]): Detected locations and their associated information.
-                                     Each row should contain (x, y, conf, class).
+            localizations (Array[M, 4]): Detected locations and their associated information.
+                                         Each row should contain (x, y, conf, class).
             gt_locs (Array[M, 2]: Ground truth locations in xy format.
             gt_cls (Array[M]): The class labels.
         """
         if gt_cls.shape[0] == 0:  # Check if labels is empty
-            if locations is not None:
-                locations = locations[locations[:, 2] > self.conf]
-                location_classes = locations[:, 3].int()
-                for lc in location_classes:
+            if localizations is not None:
+                localizations = localizations[localizations[:, 2] > self.conf]
+                localization_classes = localizations[:, 3].int()
+                for lc in localization_classes:
                     self.matrix[lc, self.nc] += 1  # false positives
             return
-        if locations is None:
+        if localizations is None:
             gt_classes = gt_cls.int()
             for gc in gt_classes:
                 self.matrix[self.nc, gc] += 1  # background FN
             return
 
-        locations = locations[locations[:, 2] > self.conf]
+        localizations = localizations[localizations[:, 2] > self.conf]
         gt_classes = gt_cls.int()
-        location_classes = locations[:, 3].int()
-        dor = loc_dor(gt_locs, locations[:, :2])
+        localization_classes = localizations[:, 3].int()
+        dor = loc_dor(gt_locs, localizations[:, :2])
 
 
         '''
@@ -454,15 +454,14 @@ class ConfusionMatrix:
         for i, gc in enumerate(gt_classes):
             j = m0 == i
             if n and sum(j) == 1:
-                self.matrix[location_classes[m1[j]], gc] += 1  # correct
+                self.matrix[localization_classes[m1[j]], gc] += 1  # correct
             else:
                 self.matrix[self.nc, gc] += 1  # true background
 
         if n:
-            for i, lc in enumerate(location_classes):
+            for i, lc in enumerate(localization_classes):
                 if not any(m1 == i):
                     self.matrix[lc, self.nc] += 1  # predicted background
-    
 
     def matrix(self):
         """Returns the confusion matrix."""
@@ -622,7 +621,8 @@ def ap_per_class(
     tp, conf, pred_cls, target_cls, plot=False, on_plot=None, save_dir=Path(), names=(), eps=1e-16, prefix=""
 ):
     """
-    Computes the average precision per class for object detection evaluation.
+    Computes the average precision per class for object detection evaluation. Can be used for localization 
+    evaluation as well.
 
     Args:
         tp (np.ndarray): Binary array indicating whether the detection is correct (True) or not (False).
