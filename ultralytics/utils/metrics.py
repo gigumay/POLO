@@ -289,25 +289,48 @@ def smooth_BCE(eps=0.1):
     return 1.0 - 0.5 * eps, 0.5 * eps
 
 
+def loc_dor(loc1, loc2, radius):
+    """
+    Calculate distance-over-radius (DoR) of locations. Both sets of locations are expected to be in (x, y) format.
+    Note that values may become very small when working with normalized coordinates? 
+    Args:
+        loc1 (torch.Tensor): A tensor of shape (N, 2) representing N locations
+        box2 (torch.Tensor): A tensor of shape (M, 4) representing M locations.
+        radius (float): Float specifying the radius to use for the DoR calculation.
+    Returns:
+        (torch.Tensor): An NxM tensor containing the pairwise DoR values for every element in loc1 and loc2.
+    """
+    pairwise_dist = torch.cdist(loc1, loc2)
+
+    if pairwise_dist.shape[0] == 1 or pairwise_dist.shape[1] == 1:
+        pairwise_dist.squeeze()
+
+    dor = pairwise_dist / radius
+
+    return dor
+
+
 class ConfusionMatrix:
     """
     A class for calculating and updating a confusion matrix for object detection and classification tasks.
 
     Attributes:
-        task (str): The type of task, either 'detect' or 'classify'.
+        task (str): The type of task, either 'detect', 'locate', 'classify'.
         matrix (np.ndarray): The confusion matrix, with dimensions depending on the task.
         nc (int): The number of classes.
         conf (float): The confidence threshold for detections.
         iou_thres (float): The Intersection over Union threshold.
+        dor_thresh (float): The Distance over Radius threshold. 
     """
 
-    def __init__(self, nc, conf=0.25, iou_thres=0.45, task="detect"):
+    def __init__(self, nc, conf=0.25, iou_thres=0.45, dor_thresh=1, task="detect"):
         """Initialize attributes for the YOLO model."""
         self.task = task
-        self.matrix = np.zeros((nc + 1, nc + 1)) if self.task == "detect" else np.zeros((nc, nc))
+        self.matrix = np.zeros((nc + 1, nc + 1)) if (self.task == "detect" or self.task == "locate") else np.zeros((nc, nc))
         self.nc = nc  # number of classes
         self.conf = 0.25 if conf in (None, 0.001) else conf  # apply 0.25 if default val conf is passed
         self.iou_thres = iou_thres
+        self.dor_thres= dor_thresh
 
     def process_cls_preds(self, preds, targets):
         """
@@ -379,6 +402,67 @@ class ConfusionMatrix:
             for i, dc in enumerate(detection_classes):
                 if not any(m1 == i):
                     self.matrix[dc, self.nc] += 1  # predicted background
+
+    def process_batch_loc(self, locations, gt_locs, gt_cls):
+        """
+        Update confusion matrix for localization task.
+
+        Args:
+            locations (Array[M, 4]): Detected locations and their associated information.
+                                     Each row should contain (x, y, conf, class).
+            gt_locs (Array[M, 2]: Ground truth locations in xy format.
+            gt_cls (Array[M]): The class labels.
+        """
+        if gt_cls.shape[0] == 0:  # Check if labels is empty
+            if locations is not None:
+                locations = locations[locations[:, 2] > self.conf]
+                location_classes = locations[:, 3].int()
+                for lc in location_classes:
+                    self.matrix[lc, self.nc] += 1  # false positives
+            return
+        if locations is None:
+            gt_classes = gt_cls.int()
+            for gc in gt_classes:
+                self.matrix[self.nc, gc] += 1  # background FN
+            return
+
+        locations = locations[locations[:, 2] > self.conf]
+        gt_classes = gt_cls.int()
+        location_classes = locations[:, 3].int()
+        dor = loc_dor(gt_locs, locations[:, :2])
+
+
+        '''
+        The following block finds predictions whose confidence exceeds the threshold, and removes 
+        duplicates for a given ground truth (the more confident prediction is kept). As far as I
+        understand, this removes the need to implement a condition to count double detections as 
+        false positives - at least for validation. 
+        '''
+        x = torch.where(dor <= self.dor_thres)
+        if x[0].shape[0]:
+            matches = torch.cat((torch.stack(x, 1), dor[x[0], x[1]][:, None]), 1).cpu().numpy()
+            if x[0].shape[0] > 1:
+                matches = matches[matches[:, 2].argsort()[::-1]]
+                matches = matches[np.unique(matches[:, 1], return_index=True)[1]]
+                matches = matches[matches[:, 2].argsort()[::-1]]
+                matches = matches[np.unique(matches[:, 0], return_index=True)[1]]
+        else:
+            matches = np.zeros((0, 3))
+
+        n = matches.shape[0] > 0
+        m0, m1, _ = matches.transpose().astype(int)
+        for i, gc in enumerate(gt_classes):
+            j = m0 == i
+            if n and sum(j) == 1:
+                self.matrix[location_classes[m1[j]], gc] += 1  # correct
+            else:
+                self.matrix[self.nc, gc] += 1  # true background
+
+        if n:
+            for i, lc in enumerate(location_classes):
+                if not any(m1 == i):
+                    self.matrix[lc, self.nc] += 1  # predicted background
+    
 
     def matrix(self):
         """Returns the confusion matrix."""
