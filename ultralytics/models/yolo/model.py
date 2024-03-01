@@ -41,7 +41,7 @@ class YOLO(Model):
             "locate": {
                 "model": LocalizationModel,
                 "trainer": yolo.locate.LocalizationTrainer,
-                "validator": yolo.detect.DetectionValidator,
+                "validator": yolo.locate.LocalizationValidator,
                 "predictor": yolo.detect.DetectionPredictor,
             },
             "segment": {

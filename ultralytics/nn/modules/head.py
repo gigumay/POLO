@@ -132,23 +132,23 @@ class Locate(nn.Module):
             box = x_cat[:, : self.reg_max * 2]
             cls = x_cat[:, self.reg_max * 2 :]
         else:
-            # box.shape = [reg_max*2, n_anchors]
+            # location.shape = [reg_max*2, n_anchors]
             # cls.shape = [nc, n_anchors]
-            point, cls = x_cat.split((self.reg_max * 2, self.nc), 1)
+            location, cls = x_cat.split((self.reg_max * 2, self.nc), 1)
 
         if self.export and self.format in ("tflite", "edgetpu"):
             # Precompute normalization factor to increase numerical stability
             # See https://github.com/ultralytics/ultralytics/issues/7371
             grid_h = shape[2]
             grid_w = shape[3]
-            grid_size = torch.tensor([grid_w, grid_h, grid_w, grid_h], device=point.device).reshape(1, 4, 1)
+            grid_size = torch.tensor([grid_w, grid_h, grid_w, grid_h], device=location.device).reshape(1, 4, 1)
             norm = self.strides / (self.stride[0] * grid_size)
-            cpoint = self.decode_points(self.locInf(point) * norm, self.anchors.unsqueeze(0) * norm[:, :2])
+            loc = self.decode_locs(self.locInf(location) * norm, self.anchors.unsqueeze(0) * norm[:, :2])
         else:
-            # cpoint -> [2, n_anchors]
-            cpoint = self.decode_points(self.locInf(point), self.anchors.unsqueeze(0)) * self.strides 
+            # loc -> [2, n_anchors]
+            loc = self.decode_points(self.locInf(location), self.anchors.unsqueeze(0)) * self.strides 
 
-        y = torch.cat((cpoint, cls.sigmoid()), 1)
+        y = torch.cat((loc, cls.sigmoid()), 1)
         return y if self.export else (y, x)
 
     def bias_init(self):
@@ -160,8 +160,8 @@ class Locate(nn.Module):
             a[-1].bias.data[:] = 1.0  # pt
             b[-1].bias.data[: m.nc] = math.log(5 / m.nc / (640 / s) ** 2)  # cls (.01 objects, 80 classes, 640 img)
 
-    def decode_points(self, pts, anchors):
-        """Decode center points."""
+    def decode_locs(self, pts, anchors):
+        """Decode locations."""
         return dist2coords(pts, anchors)
 
     

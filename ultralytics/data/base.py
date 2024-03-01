@@ -130,11 +130,15 @@ class BaseDataset(Dataset):
             if include_class is not None:
                 cls = self.labels[i]["cls"]
                 bboxes = self.labels[i]["bboxes"]
+                locations = self.labels[i]["locations"]
                 segments = self.labels[i]["segments"]
                 keypoints = self.labels[i]["keypoints"]
                 j = (cls == include_class_array).any(1)
                 self.labels[i]["cls"] = cls[j]
-                self.labels[i]["bboxes"] = bboxes[j]
+                if bboxes is not None:
+                    self.labels[i]["bboxes"] = bboxes[j]
+                if locations is not None:
+                    self.labels[i]["locations"] = locations[j]
                 if segments:
                     self.labels[i]["segments"] = [segments[si] for si, idx in enumerate(j) if idx]
                 if keypoints is not None:
@@ -299,6 +303,7 @@ class BaseDataset(Dataset):
                 shape=shape,  # format: (height, width)
                 cls=cls,
                 bboxes=bboxes, # xywh
+                locations=locations, # xy
                 segments=segments,  # xy
                 keypoints=keypoints, # xy
                 normalized=True, # or False
