@@ -173,6 +173,11 @@ class BaseValidator:
 
             # Inference
             with dt[1]:
+                '''
+                Returns a tuple: 
+                preds[0] = tensor of shape [batch_size, (bbox_coords + n_classes), n_anchors
+                preds[1] is a list of tensor that represent the feature maps thatg the detection head outputs
+                '''
                 preds = model(batch["img"], augment=augment)
 
             # Loss
@@ -182,10 +187,17 @@ class BaseValidator:
 
             # Postprocess
             with dt[3]:
+                '''
+                NMS for Detection/Localization. preds is a tuple.
+                Returns a list of length batch_size, containing the predictions for each image 
+                in the batch. The predictions are represented by tensors of shape [n_pred, 6],
+                where n_pred is the number of detected boxes, and 6 is the 4 bbox coordinates, the confidence,
+                and the class. 
+                '''
                 preds = self.postprocess(preds)
 
             self.update_metrics(preds, batch)
-            if self.args.plots and batch_i < 3:
+            if self.args.plots and batch_i < 3:     # only for final validation / last epoch 
                 self.plot_val_samples(batch, batch_i)
                 self.plot_predictions(batch, preds, batch_i)
 
