@@ -650,6 +650,37 @@ def plot_labels(boxes, cls, names=(), save_dir=Path(""), on_plot=None):
         on_plot(fname)
 
 
+@TryExcept()  # known issue https://github.com/ultralytics/yolov5/issues/5395
+@plt_settings()
+def plot_labels_loc(locations, cls, names=(), save_dir=Path(""), on_plot=None):
+    """Plot class histograms"""
+    
+    # Filter matplotlib>=3.7.2 warning and Seaborn use_inf and is_categorical FutureWarnings
+    warnings.filterwarnings("ignore", category=UserWarning, message="The figure layout has changed to tight")
+    warnings.filterwarnings("ignore", category=FutureWarning)
+
+    # Plot dataset labels
+    LOGGER.info(f"Plotting labels to {save_dir / 'labels.jpg'}... ")
+    nc = int(cls.max() + 1)  # number of classes
+    locations = locations[:1000000]  # limit to 1M labels
+
+    # Matplotlib labels
+    y = plt.hist(cls, bins=np.linspace(0, nc, nc + 1) - 0.5, rwidth=0.8)
+    for i in range(nc):
+        y[2].patches[i].set_color([x / 255 for x in colors(i)])
+    plt.ylabel("instances")
+    if 0 < len(names) < 30:
+        plt.xticks(range(len(names)), labels=list(names.values()), rotation=90, fontsize=10)
+    else:
+        plt.xlabel("classes")
+
+    fname = save_dir / "labels.jpg"
+    plt.savefig(fname, dpi=200)
+    plt.close()
+    if on_plot:
+        on_plot(fname)
+
+
 def save_one_box(xyxy, im, file=Path("im.jpg"), gain=1.02, pad=10, square=False, BGR=False, save=True):
     """
     Save image crop as {file} with crop size multiple {gain} and {pad} pixels. Save and/or return crop.

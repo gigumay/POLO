@@ -10,7 +10,7 @@ from ultralytics.data import build_dataloader, build_yolo_dataset, converter
 from ultralytics.engine.validator import BaseValidator
 from ultralytics.utils import LOGGER, ops
 from ultralytics.utils.checks import check_requirements
-from ultralytics.utils.metrics import ConfusionMatrix, DetMetrics, box_iou
+from ultralytics.utils.metrics import ConfusionMatrix, LocMetrics, box_iou
 from ultralytics.utils.plotting import output_to_target, plot_images
 
 
@@ -35,25 +35,25 @@ class LocalizationValidator(BaseValidator):
         self.is_coco = False
         self.class_map = None
         self.args.task = "locate"
-        self.metrics = DetMetrics(save_dir=self.save_dir, on_plot=self.on_plot)
-        self.iouv = torch.linspace(0.5, 0.95, 10)  # iou vector for mAP@0.5:0.95
-        self.niou = self.iouv.numel()
+        self.metrics = LocMetrics(save_dir=self.save_dir, on_plot=self.on_plot)
+        self.dorv = torch.linspace(1.0, 0.1, 10)  # dor vector for mAP@1:0.1
+        self.ndor = self.dorv.numel()
         self.lb = []  # for autolabelling
 
     def preprocess(self, batch):
         """Preprocesses batch of images for YOLO training."""
         batch["img"] = batch["img"].to(self.device, non_blocking=True)
         batch["img"] = (batch["img"].half() if self.args.half else batch["img"].float()) / 255
-        for k in ["batch_idx", "cls", "bboxes"]:
+        for k in ["batch_idx", "cls", "locations"]:
             batch[k] = batch[k].to(self.device)
 
         if self.args.save_hybrid:
             height, width = batch["img"].shape[2:]
             nb = len(batch["img"])
-            bboxes = batch["bboxes"] * torch.tensor((width, height, width, height), device=self.device)
+            locations = batch["locations"] * torch.tensor((width, height, width, height), device=self.device)
             self.lb = (
                 [
-                    torch.cat([batch["cls"][batch["batch_idx"] == i], bboxes[batch["batch_idx"] == i]], dim=-1)
+                    torch.cat([batch["cls"][batch["batch_idx"] == i], locations[batch["batch_idx"] == i]], dim=-1)
                     for i in range(nb)
                 ]
                 if self.args.save_hybrid

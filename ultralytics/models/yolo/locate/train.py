@@ -12,7 +12,7 @@ from ultralytics.engine.trainer import BaseTrainer
 from ultralytics.models import yolo
 from ultralytics.nn.tasks import LocalizationModel
 from ultralytics.utils import LOGGER, RANK
-from ultralytics.utils.plotting import plot_images, plot_labels, plot_results
+from ultralytics.utils.plotting import plot_images, plot_labels_loc, plot_results
 from ultralytics.utils.torch_utils import de_parallel, torch_distributed_zero_first
 
 
@@ -91,7 +91,7 @@ class LocalizationTrainer(BaseTrainer):
         return model
 
     def get_validator(self):
-        """Returns a DetectionValidator for YOLO model validation."""
+        """Returns a LocalizationValidator for YOLO model validation."""
         self.loss_names = "cls_loss", "loc_loss"
         return yolo.locate.LocalizationValidator(
             self.test_loader, save_dir=self.save_dir, args=copy(self.args), _callbacks=self.callbacks
@@ -138,6 +138,6 @@ class LocalizationTrainer(BaseTrainer):
 
     def plot_training_labels(self):
         """Create a labeled training plot of the YOLO model."""
-        boxes = np.concatenate([lb["bboxes"] for lb in self.train_loader.dataset.labels], 0)
+        locations = np.concatenate([lb["locations"] for lb in self.train_loader.dataset.labels], 0)
         cls = np.concatenate([lb["cls"] for lb in self.train_loader.dataset.labels], 0)
-        plot_labels(boxes, cls.squeeze(), names=self.data["names"], save_dir=self.save_dir, on_plot=self.on_plot)
+        plot_labels_loc(locations, cls.squeeze(), names=self.data["names"], save_dir=self.save_dir, on_plot=self.on_plot)
