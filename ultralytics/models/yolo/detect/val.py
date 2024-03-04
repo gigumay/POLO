@@ -167,7 +167,14 @@ class DetectionValidator(BaseValidator):
 
     def get_stats(self):
         """Returns metrics statistics and results dictionary."""
-        stats = {k: torch.cat(v, 0).cpu().numpy() for k, v in self.stats.items()}  # to numpy
+
+        '''
+        self.stats contains lists of tensors indicating a given statistic for each image 
+        in the validation set. E.g., the 'tp' key contains a list that for each image 
+        stores tensors that indicate whether or not a detection is tp or not depending on the 
+        IoU threshold. s
+        '''
+        stats = {k: torch.cat(v, 0).cpu().numpy() for k, v in self.stats.items()}  # to numpy (concatenate predictions)
         if len(stats) and stats["tp"].any():
             self.metrics.process(**stats)
         self.nt_per_class = np.bincount(
