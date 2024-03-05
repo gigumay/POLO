@@ -293,7 +293,8 @@ class Mosaic(BaseMixTransform):
     def _update_labels(labels, padw, padh):
         """Update labels."""
         nh, nw = labels["img"].shape[:2]
-        labels["instances"].convert_bbox(format="xyxy")
+        if labels["instances"].bboxes is not None:
+            labels["instances"].convert_bbox(format="xyxy")
         labels["instances"].denormalize(nw, nh)
         labels["instances"].add_padding(padw, padh)
         return labels

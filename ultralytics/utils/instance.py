@@ -447,4 +447,4 @@ class Instances:
     @property
     def bboxes(self):
         """Return bounding boxes."""
-        return self._bboxes.bboxes
+        return self._bboxes.bboxes if self._bboxes is not None else None
