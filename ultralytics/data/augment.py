@@ -347,9 +347,9 @@ class MixUp(BaseMixTransform):
 
 class RandomPerspective:
     """
-    Implements random perspective and affine transformations on images and corresponding bounding boxes, segments, and
-    keypoints. These transformations include rotation, translation, scaling, and shearing. The class also offers the
-    option to apply these transformations conditionally with a specified probability.
+    Implements random perspective and affine transformations on images and corresponding bounding boxes, locations,
+    segments, and keypoints. These transformations include rotation, translation, scaling, and shearing. 
+    The class also offers the option to apply these transformations conditionally with a specified probability.
 
     Attributes:
         degrees (float): Degree range for random rotations.
@@ -459,6 +459,27 @@ class RandomPerspective:
         x = xy[:, [0, 2, 4, 6]]
         y = xy[:, [1, 3, 5, 7]]
         return np.concatenate((x.min(1), y.min(1), x.max(1), y.max(1)), dtype=bboxes.dtype).reshape(4, n).T
+    
+    def apply_locations(self, locations, M):
+        """
+        Apply affine to locations.
+
+        Args:
+            locations (ndarray): keypoints, [N, 2].
+            M (ndarray): affine matrix.
+
+        Returns:
+            new_locations (ndarray): locations after affine, [N, 2].
+        """
+        n = len(locations)
+        if n == 0:
+            return locations
+        
+        xy = np.ones((n, 3), dtype=locations.dtype)
+        xy[:, :2] = deepcopy(locations) # deepcopy for safety but not sure if necessary
+        xy = xy @ M.T  # transform
+        
+        return xy[:, :2] / xy[:, 2:3] if self.perspective else xy[:, :2]
 
     def apply_segments(self, segments, M):
         """
