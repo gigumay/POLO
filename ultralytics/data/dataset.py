@@ -12,7 +12,7 @@ from PIL import Image
 
 from ultralytics.utils import LOCAL_RANK, NUM_THREADS, TQDM, colorstr, is_dir_writeable
 from ultralytics.utils.ops import resample_segments
-from .augment import Compose, Format, Instances, LetterBox, classify_augmentations, classify_transforms, v8_transforms
+from .augment import Compose, Format, Instances, LetterBox, classify_augmentations, classify_transforms, v8_transforms, v8_transforms_loc
 from .base import BaseDataset
 from .utils import HELP_URL, LOGGER, get_hash, img2label_paths, verify_image, verify_image_label
 
@@ -159,13 +159,14 @@ class YOLODataset(BaseDataset):
         if self.augment:
             hyp.mosaic = hyp.mosaic if self.augment and not self.rect else 0.0
             hyp.mixup = hyp.mixup if self.augment and not self.rect else 0.0
-            transforms = v8_transforms(self, self.imgsz, hyp)
+            transforms = v8_transforms(self, self.imgsz, hyp) if not self.use_locations else v8_transforms_loc(self, self.imgsz, hyp)
         else:
             transforms = Compose([LetterBox(new_shape=(self.imgsz, self.imgsz), scaleup=False)])
         transforms.append(
             Format(
                 bbox_format="xywh",
                 normalize=True,
+                return_locations=self.use_locations,
                 return_mask=self.use_segments,
                 return_keypoint=self.use_keypoints,
                 return_obb=self.use_obb,

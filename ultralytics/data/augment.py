@@ -536,7 +536,7 @@ class RandomPerspective:
         Affine images and targets.
 
         Args:
-            labels (dict): a dict of `bboxes`, `segments`, `keypoints`.
+            labels (dict): a dict of `bboxes`, `locations`, `segments`, `keypoints`.
         """
         if self.pre_transform and "mosaic_border" not in labels:
             labels = self.pre_transform(labels)
@@ -546,7 +546,9 @@ class RandomPerspective:
         cls = labels["cls"]
         instances = labels.pop("instances")
         # Make sure the coord formats are right
-        instances.convert_bbox(format="xyxy")
+        if instances.bboxes is not None:
+            instances.convert_bbox(format="xyxy")
+            
         instances.denormalize(*img.shape[:2][::-1])
 
         border = labels.pop("mosaic_border", self.border)
@@ -555,28 +557,36 @@ class RandomPerspective:
         # Scale for func:`box_candidates`
         img, M, scale = self.affine_transform(img, border)
 
-        bboxes = self.apply_bboxes(instances.bboxes, M)
+        bboxes = self.apply_bboxes(instances.bboxes, M) if instances.bboxes is not None else None
 
+        locations = instances.locations
         segments = instances.segments
         keypoints = instances.keypoints
         # Update bboxes if there are segments.
         if len(segments):
             bboxes, segments = self.apply_segments(segments, M)
 
+        if locations is not None:
+            locations = self.apply_locations(locations, M)
         if keypoints is not None:
             keypoints = self.apply_keypoints(keypoints, M)
-        new_instances = Instances(bboxes, segments, keypoints, bbox_format="xyxy", normalized=False)
+        new_instances = Instances(bboxes, locations, segments, keypoints, bbox_format="xyxy", normalized=False)
         # Clip
         new_instances.clip(*self.size)
 
         # Filter instances
         instances.scale(scale_w=scale, scale_h=scale, bbox_only=True)
         # Make the bboxes have the same scale with new_bboxes
-        i = self.box_candidates(
-            box1=instances.bboxes.T, box2=new_instances.bboxes.T, area_thr=0.01 if len(segments) else 0.10
-        )
-        labels["instances"] = new_instances[i]
-        labels["cls"] = cls[i]
+        if instances.bboxes is not None:
+            i = self.box_candidates(
+                box1=instances.bboxes.T, box2=new_instances.bboxes.T, area_thr=0.01 if len(segments) else 0.10
+            )
+            labels["instances"] = new_instances[i]
+            labels["cls"] = cls[i]
+        else:
+            labels["instances"] = new_instances
+            labels["cls"] = cls
+
         labels["img"] = img
         labels["resized_shape"] = img.shape[:2]
         return labels
@@ -650,7 +660,7 @@ class RandomFlip:
     """
     Applies a random horizontal or vertical flip to an image with a given probability.
 
-    Also updates any instances (bounding boxes, keypoints, etc.) accordingly.
+    Also updates any instances (bounding boxes, locations, keypoints, etc.) accordingly.
     """
 
     def __init__(self, p=0.5, direction="horizontal", flip_idx=None) -> None:
@@ -672,18 +682,19 @@ class RandomFlip:
 
     def __call__(self, labels):
         """
-        Applies random flip to an image and updates any instances like bounding boxes or keypoints accordingly.
+        Applies random flip to an image and updates any instances like bounding boxes, locations or keypoints accordingly.
 
         Args:
             labels (dict): A dictionary containing the keys 'img' and 'instances'. 'img' is the image to be flipped.
-                           'instances' is an object containing bounding boxes and optionally keypoints.
+                           'instances' is an object containing bounding boxes and optionally keypoints, or locations.
 
         Returns:
             (dict): The same dict with the flipped image and updated instances under the 'img' and 'instances' keys.
         """
         img = labels["img"]
         instances = labels.pop("instances")
-        instances.convert_bbox(format="xywh")
+        if instances.bboxes is not None: 
+            instances.convert_bbox(format="xywh")
         h, w = img.shape[:2]
         h = 1 if instances.normalized else h
         w = 1 if instances.normalized else w
@@ -704,7 +715,7 @@ class RandomFlip:
 
 
 class LetterBox:
-    """Resize image and padding for detection, instance segmentation, pose."""
+    """Resize image and padding for detection, localization, instance segmentation, pose."""
 
     def __init__(self, new_shape=(640, 640), auto=False, scaleFill=False, scaleup=True, center=True, stride=32):
         """Initialize LetterBox object with specific parameters."""
@@ -765,7 +776,8 @@ class LetterBox:
 
     def _update_labels(self, labels, ratio, padw, padh):
         """Update labels."""
-        labels["instances"].convert_bbox(format="xyxy")
+        if labels["instances"].bboxes is not None:
+            labels["instances"].convert_bbox(format="xyxy")
         labels["instances"].denormalize(*labels["img"].shape[:2][::-1])
         labels["instances"].scale(*ratio)
         labels["instances"].add_padding(padw, padh)
@@ -796,7 +808,7 @@ class CopyPaste:
             labels (dict): A dictionary containing:
                            - 'img': The image to augment.
                            - 'cls': Class labels associated with the instances.
-                           - 'instances': Object containing bounding boxes, and optionally, keypoints and segments.
+                           - 'instances': Object containing locations or bounding boxes, and optionally, keypoints and segments.
 
         Returns:
             (dict): Dict with augmented image and updated instances under the 'img', 'cls', and 'instances' keys.
@@ -897,12 +909,13 @@ class Albumentations:
 # TODO: technically this is not an augmentation, maybe we should put this to another files
 class Format:
     """
-    Formats image annotations for object detection, instance segmentation, and pose estimation tasks. The class
+    Formats image annotations for object detection, object localization, instance segmentation, and pose estimation tasks. The class
     standardizes the image and instance annotations to be used by the `collate_fn` in PyTorch DataLoader.
 
     Attributes:
         bbox_format (str): Format for bounding boxes. Default is 'xywh'.
         normalize (bool): Whether to normalize bounding boxes. Default is True.
+        return_locations (bool): Return coordinates for localization. Default is False.
         return_mask (bool): Return instance masks for segmentation. Default is False.
         return_keypoint (bool): Return keypoints for pose estimation. Default is False.
         mask_ratio (int): Downsample ratio for masks. Default is 4.
@@ -914,6 +927,7 @@ class Format:
         self,
         bbox_format="xywh",
         normalize=True,
+        return_locations=True,
         return_mask=False,
         return_keypoint=False,
         return_obb=False,
@@ -924,6 +938,7 @@ class Format:
         """Initializes the Format class with given parameters."""
         self.bbox_format = bbox_format
         self.normalize = normalize
+        self.return_locations = return_locations
         self.return_mask = return_mask  # set False when training detection only
         self.return_keypoint = return_keypoint
         self.return_obb = return_obb
@@ -932,12 +947,13 @@ class Format:
         self.batch_idx = batch_idx  # keep the batch indexes
 
     def __call__(self, labels):
-        """Return formatted image, classes, bounding boxes & keypoints to be used by 'collate_fn'."""
+        """Return formatted image, classes, bounding boxes, locations & keypoints to be used by 'collate_fn'."""
         img = labels.pop("img")
         h, w = img.shape[:2]
         cls = labels.pop("cls")
         instances = labels.pop("instances")
-        instances.convert_bbox(format=self.bbox_format)
+        if instances.bboxes is not None:
+            instances.convert_bbox(format=self.bbox_format)
         instances.denormalize(w, h)
         nl = len(instances)
 
@@ -954,7 +970,10 @@ class Format:
             instances.normalize(w, h)
         labels["img"] = self._format_img(img)
         labels["cls"] = torch.from_numpy(cls) if nl else torch.zeros(nl)
-        labels["bboxes"] = torch.from_numpy(instances.bboxes) if nl else torch.zeros((nl, 4))
+        if instances.bboxes is not None:
+            labels["bboxes"] = torch.from_numpy(instances.bboxes) if nl else torch.zeros((nl, 4)) 
+        if self.return_locations:
+            labels["locations"] = torch.from_numpy(instances.locations)
         if self.return_keypoint:
             labels["keypoints"] = torch.from_numpy(instances.keypoints)
         if self.return_obb:
@@ -1023,6 +1042,36 @@ def v8_transforms(dataset, imgsz, hyp, stretch=False):
             RandomFlip(direction="horizontal", p=hyp.fliplr, flip_idx=flip_idx),
         ]
     )  # transforms
+
+
+def v8_transforms_loc(dataset, imgsz, hyp, stretch=False):
+    """Convert images to a size suitable for YOLOv8 training."""
+    pre_transform = Compose(
+        [
+            Mosaic(dataset, imgsz=imgsz, p=hyp.mosaic),
+            RandomPerspective(
+                degrees=hyp.degrees,
+                translate=hyp.translate,
+                scale=hyp.scale,
+                shear=hyp.shear,
+                perspective=hyp.perspective,
+                pre_transform=None if stretch else LetterBox(new_shape=(imgsz, imgsz)),
+            ),
+        ]
+    )
+
+    return Compose(
+        [
+            pre_transform,
+            MixUp(dataset, pre_transform=pre_transform, p=hyp.mixup),
+            RandomHSV(hgain=hyp.hsv_h, sgain=hyp.hsv_s, vgain=hyp.hsv_v),
+            RandomFlip(direction="vertical", p=hyp.flipud),
+            RandomFlip(direction="horizontal", p=hyp.fliplr, flip_idx=flip_idx),
+        ]
+    )   # localization transforms
+
+
+
 
 
 # Classification augmentations -----------------------------------------------------------------------------------------
