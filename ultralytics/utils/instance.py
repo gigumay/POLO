@@ -359,7 +359,8 @@ class Instances:
             self.keypoints[..., 0] = w - self.keypoints[..., 0]
 
     def clip(self, w, h):
-        """Clips bounding boxes, segments, and keypoints values to stay within image boundaries."""
+        """Clips bounding boxes, segments, and keypoints values to stay within image boundaries.
+        In the case of locations, annotations outside of the image broders are removed."""
         if self._bboxes is not None:
             ori_format = self._bboxes.format
             self.convert_bbox(format="xyxy")
@@ -368,8 +369,8 @@ class Instances:
             if ori_format != "xyxy":
                 self.convert_bbox(format=ori_format)
         if self.locations is not None:
-            self.locations[:, 0] = self.locations[:, 0].clip(0, w)
-            self.locations[:, 1] = self.locations[:, 1].clip(0, h)
+            good = (self.locations[:, 0] < w) & (self.locations[:, 1] < h)
+            self.locations = self.locations[good]
         if self.segments is not None:
             self.segments[..., 0] = self.segments[..., 0].clip(0, w)
             self.segments[..., 1] = self.segments[..., 1].clip(0, h)
@@ -435,7 +436,7 @@ class Instances:
 
         use_locations = instances_list[0].locations is not None
         use_keypoint = instances_list[0].keypoints is not None
-        bbox_format = instances_list[0]._bboxes.format
+        bbox_format = instances_list[0]._bboxes.format if instances_list[0].bboxes is not None else None
         normalized = instances_list[0].normalized
 
         cat_boxes = np.concatenate([ins.bboxes for ins in instances_list], axis=axis) if not use_locations else None

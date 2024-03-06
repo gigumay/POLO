@@ -319,8 +319,9 @@ class Mosaic(BaseMixTransform):
             "mosaic_border": self.border,
         }
         final_labels["instances"].clip(imgsz, imgsz)
-        good = final_labels["instances"].remove_zero_area_boxes()
-        final_labels["cls"] = final_labels["cls"][good]
+        if labels["instances"].bboxes is not None:
+            good = final_labels["instances"].remove_zero_area_boxes()
+            final_labels["cls"] = final_labels["cls"][good]
         return final_labels
 
 
@@ -563,7 +564,7 @@ class RandomPerspective:
         segments = instances.segments
         keypoints = instances.keypoints
         # Update bboxes if there are segments.
-        if len(segments):
+        if segments is not None and len(segments):
             bboxes, segments = self.apply_segments(segments, M)
 
         if locations is not None:
@@ -1066,7 +1067,7 @@ def v8_transforms_loc(dataset, imgsz, hyp, stretch=False):
             MixUp(dataset, pre_transform=pre_transform, p=hyp.mixup),
             RandomHSV(hgain=hyp.hsv_h, sgain=hyp.hsv_s, vgain=hyp.hsv_v),
             RandomFlip(direction="vertical", p=hyp.flipud),
-            RandomFlip(direction="horizontal", p=hyp.fliplr, flip_idx=flip_idx),
+            RandomFlip(direction="horizontal", p=hyp.fliplr, flip_idx=None),
         ]
     )   # localization transforms
 
