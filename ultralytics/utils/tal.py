@@ -352,7 +352,7 @@ class LocTaskAlignedAssigner(nn.Module):
         """Compute alignment metric given predicted and ground truth locations."""
         na = pd_locations.shape[-2]
         mask_gt = mask_gt.bool()  # b, max_num_obj, h*w
-        dist_ratios = torch.zeros([self.bs, self.n_max_locs, na], dtype=pd_locations.dtype, device=pd_locations.device)
+        dist_scores = torch.zeros([self.bs, self.n_max_locs, na], dtype=pd_locations.dtype, device=pd_locations.device)
         loc_scores = torch.zeros([self.bs, self.n_max_locs, na], dtype=pd_scores.dtype, device=pd_scores.device)
 
         ind = torch.zeros([2, self.bs, self.n_max_locs], dtype=torch.long)  # 2, b, max_num_obj
@@ -364,10 +364,10 @@ class LocTaskAlignedAssigner(nn.Module):
         # (b, max_num_obj, 1, 2), (b, 1, h*w, 2)
         pd_locs = pd_locations.unsqueeze(1).expand(-1, self.n_max_locs, -1, -1)[mask_gt]
         gt_locs = gt_locations.unsqueeze(2).expand(-1, -1, na, -1)[mask_gt]
-        dist_ratios[mask_gt] = self.loc_dor(gt_locs, pd_locs)
+        dist_scores[mask_gt] = 1 / self.loc_dor(gt_locs, pd_locs)   # inverse since high scores a bad
 
-        align_metric = loc_scores.pow(self.alpha) * dist_ratios.pow(self.beta)
-        return align_metric, dist_ratios
+        align_metric = loc_scores.pow(self.alpha) * dist_scores.pow(self.beta)
+        return align_metric, dist_scores
 
     def iou_calculation(self, gt_bboxes, pd_bboxes):
         """Iou calculation for horizontal bounding boxes."""
@@ -475,8 +475,9 @@ class LocTaskAlignedAssigner(nn.Module):
         gt_locs_reordered = gt_locations.view(-1, 1, 2) # ((bs*n_gt), 1, 2)
         squared_distances = ((xy_candidates[None] - gt_locs_reordered) ** 2).sum(dim=2) # ((bs*n_gt), n_anchors)
         squared_dist_reordered = squared_distances.view(bs, n_gt_locs, n_anchors)
+        euclid_distances = torch.sqrt(squared_dist_reordered)
 
-        return squared_dist_reordered.le_(radius**2)
+        return euclid_distances.le_(radius) 
     
 
     @staticmethod
