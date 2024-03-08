@@ -246,15 +246,15 @@ class v8DetectionLoss:
 
         return loss.sum() * batch_size, loss.detach()  # loss(box, cls, dfl)
     
-class LocalizationLoss:
+class v8LocalizationLoss:
     """Criterion class for computing training losses."""
 
     def __init__(self, model):  # model must be de-paralleled
-        """Initializes v8DetectionLoss with the model, defining model-related properties and BCE loss function."""
+        """Initializes v8LocalizationLoss with the model, defining model-related properties and BCE loss function."""
         device = next(model.parameters()).device  # get model device
         h = model.args  # hyperparameters
 
-        m = model.model[-1]  # Detect() module
+        m = model.model[-1]  # Locate() module
         self.bce = nn.BCEWithLogitsLoss(reduction="none")
         self.hyp = h
         self.stride = m.stride  # model strides

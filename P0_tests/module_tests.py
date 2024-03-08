@@ -43,7 +43,31 @@ def pairwise_px_dist(image_height, image_width, sample_size_1, sample_size_2):
 
 
 if __name__ == "__main__":
-    # Example usage
+
+    ####################################### CANDIDATES IN RADIUS ################################################
+    #############################################################################################################
+    bs = 5
+    n_anchors = 20
+    n_gts = 15
+    anchors_test = torch.randint(11, (n_anchors, 2))
+    gt_test = torch.randint(11, (bs, n_gts, 2))
+
+    gt_view = gt_test.view(-1, 1, 2)
+    diff = anchors_test[None] - gt_view
+    squared = diff ** 2
+    sum_squared = squared.sum(dim=2)
+    sum_squared_view = sum_squared.view(bs, n_gts, n_anchors)
+
+
+
+
+
+    print("BP")
+
+
+    """
+    ####################################### PAIRWISE PX DIST ###################################################
+    ############################################################################################################
     image_height = 100  # Example image height
     image_width = 100   # Example image width
     sample_size_1 = 4  # Number of pixels in the first sample
@@ -52,3 +76,4 @@ if __name__ == "__main__":
     distances_abs, distances_norm = pairwise_px_dist(image_height, image_width, sample_size_1, sample_size_2)
 
     print(f"Distances abs:\n{distances_abs}\n\nDistances norm:\n{distances_norm}")
+    """
