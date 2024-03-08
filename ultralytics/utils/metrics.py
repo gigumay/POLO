@@ -289,25 +289,44 @@ def smooth_BCE(eps=0.1):
     return 1.0 - 0.5 * eps, 0.5 * eps
 
 
-def loc_dor(loc1, loc2, radius):
+def loc_dor_pw(loc1, loc2, radius):
     """
-    Calculate distance-over-radius (DoR) of locations. Both sets of locations are expected to be in (x, y) format.
+    Calculate the pairwise distance-over-radius (DoR) of locations. Both sets of locations are expected to be in
+    (x, y) format.
     Note that values may become very small when working with normalized coordinates? 
+
     Args:
         loc1 (torch.Tensor): A tensor of shape (N, 2) representing N locations
-        box2 (torch.Tensor): A tensor of shape (M, 4) representing M locations.
+        loc2 (torch.Tensor): A tensor of shape (M, 2) representing M locations.
         radius (float): Float specifying the radius to use for the DoR calculation.
     Returns:
         (torch.Tensor): An NxM tensor containing the pairwise DoR values for every element in loc1 and loc2.
     """
     pairwise_dist = torch.cdist(loc1, loc2)
+    pw_dor = pairwise_dist / radius
 
-    if pairwise_dist.shape[0] == 1 or pairwise_dist.shape[1] == 1:
-        pairwise_dist.squeeze()
+    return pw_dor
 
-    dor = pairwise_dist / radius
+def loc_dor(loc1, loc2, radius):
+    """
+    Calculate the Distance-over-Radius (DoR) of loc1 and loc2. Both tensors must have two columns
+    (meanign that they are expected in the (x,y) format). loc1 can have either one row or as many as 
+    loc2. In any case the output will have the same amount of elements as loc2 has rows. 
+
+    Args:
+        loc1 (torch.Tensor): A tensor of shape (1 or N, 2) representing 1 or N locations
+        loc2 (torch.Tensor): A tensor of shape (N, 2) representing N locations.
+        radius (float): Float specifying the radius to use for the DoR calculation.
+    Returns:
+        (torch.Tensor): An Nx1 tensor containing the DoR values.
+
+    """
+    euclid_dist = torch.sqrt(((loc1 - loc2) **2).sum(dim=1))
+    dor = euclid_dist / radius
 
     return dor
+
+
 
 
 class ConfusionMatrix:

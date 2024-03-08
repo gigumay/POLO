@@ -1,4 +1,5 @@
 import torch
+from ultralytics.utils.metrics import loc_dor, bbox_iou
 
 def pairwise_px_dist(image_height, image_width, sample_size_1, sample_size_2):
     """
@@ -43,7 +44,38 @@ def pairwise_px_dist(image_height, image_width, sample_size_1, sample_size_2):
 
 
 if __name__ == "__main__":
+    ####################################### DOR #################################################################
+    #############################################################################################################
+    n_loc1 = 3
+    n_loc2 = 3
 
+    
+    loc1 = torch.randint(11, (n_loc1, 2))
+    loc2 = torch.randint(11, (n_loc2, 2))
+
+    test_loc = loc_dor(loc1=loc1, loc2=loc2, radius=1.5)
+
+
+    ####################################### IOU #################################################################
+    #############################################################################################################
+    n_box1 = 1
+    n_box2 = 4
+
+    
+    box1 = torch.randint(11, (n_box1, 4))
+    box2 = torch.randint(11, (n_box2, 4))
+
+    test_box = bbox_iou(box1=box1, box2=box2, xywh=False)
+
+
+
+
+
+
+    print("BP")
+
+
+    """
     ####################################### CANDIDATES IN RADIUS ################################################
     #############################################################################################################
     bs = 5
@@ -58,22 +90,15 @@ if __name__ == "__main__":
     sum_squared = squared.sum(dim=2)
     sum_squared_view = sum_squared.view(bs, n_gts, n_anchors)
 
-
-
-
-
-    print("BP")
-
-
-    """
     ####################################### PAIRWISE PX DIST ###################################################
     ############################################################################################################
     image_height = 100  # Example image height
     image_width = 100   # Example image width
     sample_size_1 = 4  # Number of pixels in the first sample
-    sample_size_2 = 1  # Number of pixels in the second sample
+    sample_size_2 = 4  # Number of pixels in the second sample
 
     distances_abs, distances_norm = pairwise_px_dist(image_height, image_width, sample_size_1, sample_size_2)
 
     print(f"Distances abs:\n{distances_abs}\n\nDistances norm:\n{distances_norm}")
+    
     """
