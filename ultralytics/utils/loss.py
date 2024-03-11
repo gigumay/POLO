@@ -8,7 +8,7 @@ from ultralytics.utils.metrics import OKS_SIGMA
 from ultralytics.utils.ops import crop_mask, xywh2xyxy, xyxy2xywh
 from ultralytics.utils.tal import RotatedTaskAlignedAssigner, TaskAlignedAssigner, LocTaskAlignedAssigner, dist2bbox, dist2rbox, make_anchors
 from .metrics import bbox_iou, probiou, loc_dor
-from .tal import bbox2dist
+from .tal import bbox2dist, offsets2coords
 
 
 class VarifocalLoss(nn.Module):
@@ -132,7 +132,7 @@ class DoRLoss(nn.Module):
         
         assert not torch.any(dor > 1)   # should technically be impossible but just to be safe
         
-        # Here I could also use 1 - 1/dor. ßs
+        # Here I could also use 1 - 1/DoR.
         loss_dor = (dor * weight).sum() / target_scores_sum
 
         return loss_dor
@@ -291,6 +291,7 @@ class v8LocalizationLoss:
 
         m = model.model[-1]  # Locate() module
         self.bce = nn.BCEWithLogitsLoss(reduction="none")
+        self.loc_loss = HausdorffLoss()
         self.hyp = h
         self.stride = m.stride  # model strides
         self.nc = m.nc  # number of classes
@@ -299,45 +300,46 @@ class v8LocalizationLoss:
         self.device = device
 
         self.assigner = LocTaskAlignedAssigner(topk=10, num_classes=self.nc, alpha=0.5, beta=6.0)
-#        self.dist_loss = Disoss(m.reg_max - 1, use_dfl=self.use_dfl).to(device)
         self.proj = torch.arange(m.reg_max, dtype=torch.float, device=device)
 
     def preprocess(self, targets, batch_size, scale_tensor):
         """Preprocesses the target counts and matches with the input batch size to output a tensor."""
         if targets.shape[0] == 0:
-            out = torch.zeros(batch_size, 0, 5, device=self.device)
+            out = torch.zeros(batch_size, 0, 3, device=self.device)
         else:
             i = targets[:, 0]  # image index
             _, counts = i.unique(return_counts=True)
             counts = counts.to(dtype=torch.int32)
-            out = torch.zeros(batch_size, counts.max(), 5, device=self.device)
+            out = torch.zeros(batch_size, counts.max(), 3, device=self.device)
             for j in range(batch_size):
                 matches = i == j
                 n = matches.sum()
                 if n:
                     out[j, :n] = targets[matches, 1:]
-            out[..., 1:5] = xywh2xyxy(out[..., 1:5].mul_(scale_tensor))
+            out[..., 1:3] = out[..., 1:3].mul_(scale_tensor)
         return out
-
-    def bbox_decode(self, anchor_points, pred_dist):
+    
+    def points_decode(self, anchor_points, pred_offsets):
         """Decode predicted object bounding box coordinates from anchor points and distribution."""
         if self.use_dfl:
-            b, a, c = pred_dist.shape  # batch, anchors, channels
-            pred_dist = pred_dist.view(b, a, 4, c // 4).softmax(3).matmul(self.proj.type(pred_dist.dtype))
+            b, a, c = pred_offsets.shape  # batch, anchors, channels
+            pred_offsets = pred_offsets.view(b, a, 2, c // 2).softmax(3)
+            pred_offsets = (pred_offsets * 2) - 1
+            pred_offsets = pred_offsets.matmul(self.proj.type(pred_offsets.dtype))
             # pred_dist = pred_dist.view(b, a, c // 4, 4).transpose(2,3).softmax(3).matmul(self.proj.type(pred_dist.dtype))
             # pred_dist = (pred_dist.view(b, a, c // 4, 4).softmax(2) * self.proj.type(pred_dist.dtype).view(1, 1, -1, 1)).sum(2)
-        return dist2bbox(pred_dist, anchor_points, xywh=False)
+        return offsets2coords(pred_offsets, anchor_points)
 
     def __call__(self, preds, batch):
-        """Calculate the sum of the loss for box, cls and dfl multiplied by batch size."""
-        loss = torch.zeros(3, device=self.device)  # box, cls, dfl
+        """Calculate the sum of the loss for cls and loc multiplied by batch size."""
+        loss = torch.zeros(2, device=self.device)  # cls, loc
         feats = preds[1] if isinstance(preds, tuple) else preds
-        pred_distri, pred_scores = torch.cat([xi.view(feats[0].shape[0], self.no, -1) for xi in feats], 2).split(
-            (self.reg_max * 4, self.nc), 1
+        pred_offsets, pred_scores = torch.cat([xi.view(feats[0].shape[0], self.no, -1) for xi in feats], 2).split(
+            (self.reg_max * 2, self.nc), 1
         )
 
         pred_scores = pred_scores.permute(0, 2, 1).contiguous()
-        pred_distri = pred_distri.permute(0, 2, 1).contiguous()
+        pred_offsets = pred_offsets.permute(0, 2, 1).contiguous()
 
         dtype = pred_scores.dtype
         batch_size = pred_scores.shape[0]
@@ -345,20 +347,19 @@ class v8LocalizationLoss:
         anchor_points, stride_tensor = make_anchors(feats, self.stride, 0.5)
 
         # Targets
-        targets = torch.cat((batch["batch_idx"].view(-1, 1), batch["cls"].view(-1, 1), batch["bboxes"]), 1)
+        targets = torch.cat((batch["batch_idx"].view(-1, 1), batch["cls"].view(-1, 1), batch["points"]), 1)
         targets = self.preprocess(targets.to(self.device), batch_size, scale_tensor=imgsz[[1, 0, 1, 0]])
-        gt_labels, gt_bboxes = targets.split((1, 4), 2)  # cls, xyxy
-        mask_gt = gt_bboxes.sum(2, keepdim=True).gt_(0)
+        gt_labels, gt_locations = targets.split((1, 2), 2)  # cls, xy
+        mask_gt = gt_locations.sum(2, keepdim=True).gt_(0)
 
-        # Pboxes
-        pred_bboxes = self.bbox_decode(anchor_points, pred_distri)  # xyxy, (b, h*w, 4)
+        pred_locations = self.points_decode(anchor_points, pred_offsets)
 
-        _, target_bboxes, target_scores, fg_mask, _ = self.assigner(
+        _, target_locations, target_scores, fg_mask, _ = self.assigner(
             pred_scores.detach().sigmoid(),
-            (pred_bboxes.detach() * stride_tensor).type(gt_bboxes.dtype),
+            (pred_locations.detach() * stride_tensor).type(gt_locations.dtype),
             anchor_points * stride_tensor,
             gt_labels,
-            gt_bboxes,
+            gt_locations,
             mask_gt,
         )
 
@@ -368,16 +369,13 @@ class v8LocalizationLoss:
         # loss[1] = self.varifocal_loss(pred_scores, target_scores, target_labels) / target_scores_sum  # VFL way
         loss[1] = self.bce(pred_scores, target_scores.to(dtype)).sum() / target_scores_sum  # BCE
 
-        # Bbox loss
+        # localization loss
         if fg_mask.sum():
-            target_bboxes /= stride_tensor
-            loss[0], loss[2] = self.bbox_loss(
-                pred_distri, pred_bboxes, anchor_points, target_bboxes, target_scores, target_scores_sum, fg_mask
-            )
+            target_locations /= stride_tensor
+            loss[0] = self.loc_loss(pred_locations, target_locations, fg_mask)
 
-        loss[0] *= self.hyp.box  # box gain
+        loss[0] *= self.hyp.loc  # loc gain
         loss[1] *= self.hyp.cls  # cls gain
-        loss[2] *= self.hyp.dfl  # dfl gain
 
         return loss.sum() * batch_size, loss.detach()  # loss(box, cls, dfl)
 

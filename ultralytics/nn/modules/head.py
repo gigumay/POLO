@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 from torch.nn.init import constant_, xavier_uniform_
 
-from ultralytics.utils.tal import TORCH_1_10, dist2bbox, dist2rbox, dist2coords, make_anchors
+from ultralytics.utils.tal import TORCH_1_10, dist2bbox, dist2rbox, offsets2coords, make_anchors
 from .block import DFL, LocInf, Proto, ContrastiveHead, BNContrastiveHead
 from .conv import Conv
 from .transformer import MLP, DeformableTransformerDecoder, DeformableTransformerDecoderLayer
@@ -162,7 +162,7 @@ class Locate(nn.Module):
 
     def decode_locs(self, pts, anchors):
         """Decode locations."""
-        return dist2coords(pts, anchors)
+        return offsets2coords(pts, anchors)
 
     
 
