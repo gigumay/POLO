@@ -6,8 +6,8 @@ import torch.nn.functional as F
 
 from ultralytics.utils.metrics import OKS_SIGMA
 from ultralytics.utils.ops import crop_mask, xywh2xyxy, xyxy2xywh
-from ultralytics.utils.tal import RotatedTaskAlignedAssigner, TaskAlignedAssigner, dist2bbox, dist2rbox, make_anchors
-from .metrics import bbox_iou, probiou
+from ultralytics.utils.tal import RotatedTaskAlignedAssigner, TaskAlignedAssigner, LocTaskAlignedAssigner, dist2bbox, dist2rbox, make_anchors
+from .metrics import bbox_iou, probiou, loc_dor
 from .tal import bbox2dist
 
 
@@ -101,7 +101,42 @@ class BboxLoss(nn.Module):
             F.cross_entropy(pred_dist, tl.view(-1), reduction="none").view(tl.shape) * wl
             + F.cross_entropy(pred_dist, tr.view(-1), reduction="none").view(tl.shape) * wr
         ).mean(-1, keepdim=True)
+    
 
+
+class HausdorffLoss(nn.Module):
+    """
+    Computes the average Hausdorff distance as described in https://arxiv.org/pdf/1806.07564.pdf.
+    Code taken from the corresponding repo: https://github.com/javiribera/locating-objects-without-bboxes
+    """
+
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, pred_locations, target_locations, fg_mask):
+        pairwise_dist = torch.cdist(pred_locations[fg_mask], target_locations[fg_mask])
+        res = torch.mean(torch.min(pairwise_dist, dim=0)) + torch.mean(torch.min(pairwise_dist, dim=1))
+        return res
+        
+
+class DoRLoss(nn.Module): 
+    """Same as the IoU-based loss of the BBoxLoss class, but with DoR instead of IoU as a metric."""
+
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, pred_locations, target_locations, target_scores, target_scores_sum, fg_mask):
+        """IoU loss."""
+        weight = target_scores.sum(-1)[fg_mask].unsqueeze(-1)
+        dor = loc_dor(pred_locations[fg_mask], target_locations[fg_mask])
+        
+        assert not torch.any(dor > 1)   # should technically be impossible but just to be safe
+        
+        # Here I could also use 1 - 1/dor. ßs
+        loss_dor = (dor * weight).sum() / target_scores_sum
+
+        return loss_dor
+    
 
 class RotatedBboxLoss(BboxLoss):
     """Criterion class for computing training losses during training."""
@@ -210,7 +245,7 @@ class v8DetectionLoss:
         anchor_points, stride_tensor = make_anchors(feats, self.stride, 0.5)
 
         # Targets
-        targets = torch.cat((batch["batch_idx"].view(-1, 1), batch["cls"].view(-1, 1), batch["bboxes"]), 1)
+        targets = torch.cat((batch["batch_idx"].view(-1, 1), batch["cls"].view(-1, 1), batch["bboxes"]), 1) #normalized coords 
         targets = self.preprocess(targets.to(self.device), batch_size, scale_tensor=imgsz[[1, 0, 1, 0]])
         gt_labels, gt_bboxes = targets.split((1, 4), 2)  # cls, xyxy
         mask_gt = gt_bboxes.sum(2, keepdim=True).gt_(0)
@@ -263,10 +298,8 @@ class v8LocalizationLoss:
         self.reg_max = m.reg_max
         self.device = device
 
-        self.use_dfl = m.reg_max > 1
-
-        self.assigner = TaskAlignedAssigner(topk=10, num_classes=self.nc, alpha=0.5, beta=6.0)
-        self.bbox_loss = BboxLoss(m.reg_max - 1, use_dfl=self.use_dfl).to(device)
+        self.assigner = LocTaskAlignedAssigner(topk=10, num_classes=self.nc, alpha=0.5, beta=6.0)
+#        self.dist_loss = Disoss(m.reg_max - 1, use_dfl=self.use_dfl).to(device)
         self.proj = torch.arange(m.reg_max, dtype=torch.float, device=device)
 
     def preprocess(self, targets, batch_size, scale_tensor):
