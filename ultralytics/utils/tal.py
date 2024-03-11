@@ -318,35 +318,35 @@ class LocTaskAlignedAssigner(nn.Module):
                 torch.zeros_like(pd_scores[..., 0]).to(device),
             )
 
-        mask_pos, align_metric, overlaps = self.get_pos_mask(
+        mask_pos, align_metric, dist_scores = self.get_pos_mask(
             pd_scores, pd_locations, gt_labels, gt_locations, anc_points, mask_gt, radius
         )
 
-        target_gt_idx, fg_mask, mask_pos = self.select_highest_overlaps(mask_pos, overlaps, self.n_max_boxes)
+        target_gt_idx, fg_mask, mask_pos = self.select_closest_locs(mask_pos, dist_scores, self.n_max_boxes)
 
         # Assigned target
-        target_labels, target_bboxes, target_scores = self.get_targets(gt_labels, gt_bboxes, target_gt_idx, fg_mask)
+        target_labels, target_locations, target_scores = self.get_targets(gt_labels, gt_locations, target_gt_idx, fg_mask)
 
         # Normalize
         align_metric *= mask_pos
         pos_align_metrics = align_metric.amax(dim=-1, keepdim=True)  # b, max_num_obj
-        pos_overlaps = (overlaps * mask_pos).amax(dim=-1, keepdim=True)  # b, max_num_obj
-        norm_align_metric = (align_metric * pos_overlaps / (pos_align_metrics + self.eps)).amax(-2).unsqueeze(-1)
+        pos_dist = (dist_scores * mask_pos).amax(dim=-1, keepdim=True)  # b, max_num_obj
+        norm_align_metric = (align_metric * pos_dist / (pos_align_metrics + self.eps)).amax(-2).unsqueeze(-1)
         target_scores = target_scores * norm_align_metric
 
-        return target_labels, target_bboxes, target_scores, fg_mask.bool(), target_gt_idx
+        return target_labels, target_locations, target_scores, fg_mask.bool(), target_gt_idx
 
     def get_pos_mask(self, pd_scores, pd_locations, gt_labels, gt_locations, anc_points, mask_gt, radius):
         """Get in_gts mask, (b, max_num_obj, h*w)."""
         mask_in_radius = self.select_candidates_in_radius(anc_points, gt_locations, radius)
         # Get anchor_align metric, (b, max_num_obj, h*w)
-        align_metric, overlaps = self.get_loc_metrics(pd_scores, pd_locations, gt_labels, gt_locations, mask_in_radius * mask_gt)
+        align_metric, dist_scores = self.get_loc_metrics(pd_scores, pd_locations, gt_labels, gt_locations, mask_in_radius * mask_gt)
         # Get topk_metric mask, (b, max_num_obj, h*w)
         mask_topk = self.select_topk_candidates(align_metric, topk_mask=mask_gt.expand(-1, -1, self.topk).bool())
         # Merge all mask to a final mask, (b, max_num_obj, h*w)
         mask_pos = mask_topk * mask_in_radius * mask_gt
 
-        return mask_pos, align_metric, overlaps
+        return mask_pos, align_metric, dist_scores
 
     def get_loc_metrics(self, pd_scores, pd_locations, gt_labels, gt_locations, mask_gt):
         """Compute alignment metric given predicted and ground truth locations."""
@@ -368,10 +368,6 @@ class LocTaskAlignedAssigner(nn.Module):
 
         align_metric = loc_scores.pow(self.alpha) * dist_scores.pow(self.beta)
         return align_metric, dist_scores
-
-    def iou_calculation(self, gt_bboxes, pd_bboxes):
-        """Iou calculation for horizontal bounding boxes."""
-        return bbox_iou(gt_bboxes, pd_bboxes, xywh=False, CIoU=True).squeeze(-1).clamp_(0)
 
     def select_topk_candidates(self, metrics, largest=True, topk_mask=None):
         """
@@ -404,19 +400,19 @@ class LocTaskAlignedAssigner(nn.Module):
             # Expand topk_idxs for each value of k and add 1 at the specified positions
             count_tensor.scatter_add_(-1, topk_idxs[:, :, k : k + 1], ones)
         # count_tensor.scatter_add_(-1, topk_idxs, torch.ones_like(topk_idxs, dtype=torch.int8, device=topk_idxs.device))
-        # Filter invalid bboxes
+        # Filter invalid locations
         count_tensor.masked_fill_(count_tensor > 1, 0)
 
         return count_tensor.to(metrics.dtype)
 
-    def get_targets(self, gt_labels, gt_bboxes, target_gt_idx, fg_mask):
+    def get_targets(self, gt_labels, gt_locations, target_gt_idx, fg_mask):
         """
-        Compute target labels, target bounding boxes, and target scores for the positive anchor points.
+        Compute target labels, target locations, and target scores for the positive anchor points.
 
         Args:
             gt_labels (Tensor): Ground truth labels of shape (b, max_num_obj, 1), where b is the
                                 batch size and max_num_obj is the maximum number of objects.
-            gt_bboxes (Tensor): Ground truth bounding boxes of shape (b, max_num_obj, 4).
+            gt_locations (Tensor): Ground truth locations of shape (b, max_num_obj, 2).
             target_gt_idx (Tensor): Indices of the assigned ground truth objects for positive
                                     anchor points, with shape (b, h*w), where h*w is the total
                                     number of anchor points.
@@ -427,7 +423,7 @@ class LocTaskAlignedAssigner(nn.Module):
             (Tuple[Tensor, Tensor, Tensor]): A tuple containing the following tensors:
                 - target_labels (Tensor): Shape (b, h*w), containing the target labels for
                                           positive anchor points.
-                - target_bboxes (Tensor): Shape (b, h*w, 4), containing the target bounding boxes
+                - target_locs (Tensor):   Shape (b, h*w, 2), containing the target locations
                                           for positive anchor points.
                 - target_scores (Tensor): Shape (b, h*w, num_classes), containing the target scores
                                           for positive anchor points, where num_classes is the number
@@ -439,8 +435,8 @@ class LocTaskAlignedAssigner(nn.Module):
         target_gt_idx = target_gt_idx + batch_ind * self.n_max_boxes  # (b, h*w)
         target_labels = gt_labels.long().flatten()[target_gt_idx]  # (b, h*w)
 
-        # Assigned target boxes, (b, max_num_obj, 4) -> (b, h*w, 4)
-        target_bboxes = gt_bboxes.view(-1, gt_bboxes.shape[-1])[target_gt_idx]
+        # Assigned target locations, (b, max_num_obj, 2) -> (b, h*w, 2)
+        target_locations = gt_locations.view(-1, gt_locations.shape[-1])[target_gt_idx]
 
         # Assigned target scores
         target_labels.clamp_(0)
@@ -456,7 +452,7 @@ class LocTaskAlignedAssigner(nn.Module):
         fg_scores_mask = fg_mask[:, :, None].repeat(1, 1, self.num_classes)  # (b, h*w, 80)
         target_scores = torch.where(fg_scores_mask > 0, target_scores, 0)
 
-        return target_labels, target_bboxes, target_scores
+        return target_labels, target_locations, target_scores
 
     @staticmethod
     def select_candidates_in_radius(xy_candidates, gt_locations, radius):
@@ -481,13 +477,13 @@ class LocTaskAlignedAssigner(nn.Module):
     
 
     @staticmethod
-    def select_highest_overlaps(mask_pos, overlaps, n_max_boxes):
+    def select_closest_locs(mask_pos, dist_scores, n_max_boxes):
         """
-        If an anchor box is assigned to multiple gts, the one with the highest IoI will be selected.
+        If an anchor is assigned to multiple gts, the one with the highest 1/DoR will be selected.
 
         Args:
             mask_pos (Tensor): shape(b, n_max_boxes, h*w)
-            overlaps (Tensor): shape(b, n_max_boxes, h*w)
+            dist_scores (Tensor): shape(b, n_max_boxes, h*w)
 
         Returns:
             target_gt_idx (Tensor): shape(b, h*w)
@@ -498,7 +494,7 @@ class LocTaskAlignedAssigner(nn.Module):
         fg_mask = mask_pos.sum(-2)
         if fg_mask.max() > 1:  # one anchor is assigned to multiple gt_bboxes
             mask_multi_gts = (fg_mask.unsqueeze(1) > 1).expand(-1, n_max_boxes, -1)  # (b, n_max_boxes, h*w)
-            max_overlaps_idx = overlaps.argmax(1)  # (b, h*w)
+            max_overlaps_idx = dist_scores.argmax(1)  # (b, h*w)
 
             is_max_overlaps = torch.zeros(mask_pos.shape, dtype=mask_pos.dtype, device=mask_pos.device)
             is_max_overlaps.scatter_(1, max_overlaps_idx.unsqueeze(1), 1)
