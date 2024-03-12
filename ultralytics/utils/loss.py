@@ -126,7 +126,7 @@ class DoRLoss(nn.Module):
         super().__init__()
 
     def forward(self, pred_locations, target_locations, target_scores, target_scores_sum, fg_mask):
-        """IoU loss."""
+        """DoR loss."""
         weight = target_scores.sum(-1)[fg_mask].unsqueeze(-1)
         dor = loc_dor(pred_locations[fg_mask], target_locations[fg_mask])
         
@@ -137,6 +137,21 @@ class DoRLoss(nn.Module):
 
         return loss_dor
     
+class EuclidLoss(nn.Module):
+    """Euclidean Distance based loss as found in https://arxiv.org/pdf/2107.12746.pdf"""
+
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, pred_locations, target_locations, fg_mask):
+
+        euclid_dist = torch.sqrt(((pred_locations[fg_mask] - target_locations[fg_mask]) **2).sum(dim=1))
+
+        assert pred_locations[fg_mask].shape[0] == target_locations[fg_mask].shape[0]   # sanity chek
+
+        loss_euclid = euclid_dist.sum() / pred_locations[fg_mask].shape[0]
+        return loss_euclid
+
 
 class RotatedBboxLoss(BboxLoss):
     """Criterion class for computing training losses during training."""
@@ -347,7 +362,7 @@ class v8LocalizationLoss:
         anchor_points, stride_tensor = make_anchors(feats, self.stride, 0.5)
 
         # Targets
-        targets = torch.cat((batch["batch_idx"].view(-1, 1), batch["cls"].view(-1, 1), batch["points"]), 1)
+        targets = torch.cat((batch["batch_idx"].view(-1, 1), batch["cls"].view(-1, 1), batch["locations"]), 1)
         targets = self.preprocess(targets.to(self.device), batch_size, scale_tensor=imgsz[[1, 0, 1, 0]])
         gt_labels, gt_locations = targets.split((1, 2), 2)  # cls, xy
         mask_gt = gt_locations.sum(2, keepdim=True).gt_(0)

@@ -310,7 +310,7 @@ class Instances:
             When using boolean indexing, make sure to provide a boolean array with the same
             length as the number of instances.
         """
-        locations = self.locations[index] if self.keypoints is not None else None
+        locations = self.locations[index] if self.locations is not None else None
         segments = self.segments[index] if len(self.segments) else self.segments
         keypoints = self.keypoints[index] if self.keypoints is not None else None
         bboxes = self.bboxes[index] if self._bboxes is not None else None

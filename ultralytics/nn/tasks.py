@@ -415,7 +415,7 @@ class LocalizationModel(BaseModel):
 
     def init_criterion(self):
         """Initialize the loss criterion for the DetectionModel."""
-        return v8LocalizationLosse(self)
+        return v8LocalizationLoss(self)
 
 
 class OBBModel(DetectionModel):

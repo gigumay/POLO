@@ -974,7 +974,7 @@ class Format:
         if instances.bboxes is not None:
             labels["bboxes"] = torch.from_numpy(instances.bboxes) if nl else torch.zeros((nl, 4)) 
         if self.return_locations:
-            labels["locations"] = torch.from_numpy(instances.locations)
+            labels["locations"] = torch.from_numpy(instances.locations) if nl else torch.zeros((nl, 2))
         if self.return_keypoint:
             labels["keypoints"] = torch.from_numpy(instances.keypoints)
         if self.return_obb:
@@ -1063,11 +1063,11 @@ def v8_transforms_loc(dataset, imgsz, hyp, stretch=False):
 
     return Compose(
         [
-            pre_transform,
-            MixUp(dataset, pre_transform=pre_transform, p=hyp.mixup),
-            RandomHSV(hgain=hyp.hsv_h, sgain=hyp.hsv_s, vgain=hyp.hsv_v),
-            RandomFlip(direction="vertical", p=hyp.flipud),
-            RandomFlip(direction="horizontal", p=hyp.fliplr, flip_idx=None),
+            #pre_transform,
+            #MixUp(dataset, pre_transform=pre_transform, p=hyp.mixup),
+            #RandomHSV(hgain=hyp.hsv_h, sgain=hyp.hsv_s, vgain=hyp.hsv_v),
+            #RandomFlip(direction="vertical", p=hyp.flipud),
+            #RandomFlip(direction="horizontal", p=hyp.fliplr, flip_idx=None),
         ]
     )   # localization transforms
 
