@@ -90,6 +90,7 @@ class YOLODataset(BaseDataset):
                             cls=lb[:, 0:1],  # n, 1
                             bboxes=lb[:, 1:] if not self.use_locations else None,  # n, 4
                             locations=lb[:, 1:] if self.use_locations else None,  # n, 2
+                            
                             segments=segments,
                             keypoints=keypoint,
                             normalized=True,

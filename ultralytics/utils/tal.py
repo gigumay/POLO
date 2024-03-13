@@ -284,7 +284,7 @@ class LocTaskAlignedAssigner(nn.Module):
         self.eps = eps
 
     @torch.no_grad()
-    def forward(self, pd_scores, pd_locations, anc_points, gt_labels, gt_locations, mask_gt, radius):
+    def forward(self, pd_scores, pd_locations, anc_points, gt_labels, gt_locations, mask_gt, radii):
         """
         Compute the task-aligned assignment. Reference code is available at
         https://github.com/Nioolek/PPYOLOE_pytorch/blob/master/ppyoloe/assigner/tal_assigner.py.
@@ -296,7 +296,7 @@ class LocTaskAlignedAssigner(nn.Module):
             gt_labels (Tensor): shape(bs, n_max_locs, 1)
             gt_locations (Tensor): shape(bs, n_max_locs, 2)
             mask_gt (Tensor): shape(bs, n_max_locs, 1)
-            radius (float): radius beyond which localizations are considered false positive. 
+            radii (float): dictionary of radii specifying for each class, which localizations are considered false positive. 
 
         Returns:
             target_labels (Tensor): shape(bs, num_total_anchors)
@@ -319,7 +319,7 @@ class LocTaskAlignedAssigner(nn.Module):
             )
 
         mask_pos, align_metric, dist_scores = self.get_pos_mask(
-            pd_scores, pd_locations, gt_labels, gt_locations, anc_points, mask_gt, radius
+            pd_scores, pd_locations, gt_labels, gt_locations, anc_points, mask_gt, radii
         )
 
         target_gt_idx, fg_mask, mask_pos = self.select_closest_locs(mask_pos, dist_scores, self.n_max_boxes)
@@ -336,9 +336,9 @@ class LocTaskAlignedAssigner(nn.Module):
 
         return target_labels, target_locations, target_scores, fg_mask.bool(), target_gt_idx
 
-    def get_pos_mask(self, pd_scores, pd_locations, gt_labels, gt_locations, anc_points, mask_gt, radius):
+    def get_pos_mask(self, pd_scores, pd_locations, gt_labels, gt_locations, anc_points, mask_gt, radii):
         """Get in_gts mask, (b, max_num_obj, h*w)."""
-        mask_in_radius = self.select_candidates_in_radius(anc_points, gt_locations, radius)
+        mask_in_radius = self.select_candidates_in_radius(anc_points, gt_locations, gt_labels, radii)
         # Get anchor_align metric, (b, max_num_obj, h*w)
         align_metric, dist_scores = self.get_loc_metrics(pd_scores, pd_locations, gt_labels, gt_locations, mask_in_radius * mask_gt)
         # Get topk_metric mask, (b, max_num_obj, h*w)
@@ -455,7 +455,7 @@ class LocTaskAlignedAssigner(nn.Module):
         return target_labels, target_locations, target_scores
 
     @staticmethod
-    def select_candidates_in_radius(xy_candidates, gt_locations, radius):
+    def select_candidates_in_radius(xy_candidates, gt_locations, gt_labels, radii):
         """
         Select the positive anchor center in within the radius of a gt.
 
@@ -469,11 +469,10 @@ class LocTaskAlignedAssigner(nn.Module):
         n_anchors = xy_candidates.shape[0]
         bs, n_gt_locs, _ = gt_locations.shape
         gt_locs_reordered = gt_locations.view(-1, 1, 2) # ((bs*n_gt), 1, 2)
-        squared_distances = ((xy_candidates[None] - gt_locs_reordered) ** 2).sum(dim=2) # ((bs*n_gt), n_anchors)
-        squared_dist_reordered = squared_distances.view(bs, n_gt_locs, n_anchors)
-        euclid_distances = torch.sqrt(squared_dist_reordered)
+        euclid_distances = torch.sqrt(((xy_candidates[None] - gt_locs_reordered) ** 2).sum(dim=2)) # ((bs*n_gt), n_anchors)
+        euclid_dist_reordered = euclid_distances.view(bs, n_gt_locs, n_anchors)
 
-        return euclid_distances.le_(radius) 
+        return euclid_distances.le_(radii) 
     
 
     @staticmethod
@@ -593,5 +592,5 @@ def dist2rbox(pred_dist, pred_angle, anchor_points, dim=-1):
 
 def offsets2coords(distance, anchor_points):
     """Transform distance to coordinates."""
-    center_coords = anchor_points + distance
-    return center_coords
+    loc_coords = anchor_points + distance
+    return loc_coords

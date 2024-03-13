@@ -303,7 +303,7 @@ class v8LocalizationLoss:
         """Initializes v8LocalizationLoss with the model, defining model-related properties and BCE loss function."""
         device = next(model.parameters()).device  # get model device
         h = model.args  # hyperparameters
-
+        radii = model.radii  # radii for each class
         m = model.model[-1]  # Locate() module
         self.bce = nn.BCEWithLogitsLoss(reduction="none")
         self.loc_loss = HausdorffLoss()
@@ -311,6 +311,7 @@ class v8LocalizationLoss:
         self.stride = m.stride  # model strides
         self.nc = m.nc  # number of classes
         self.no = m.no
+        self.radii = radii
         self.reg_max = m.reg_max
         self.device = device
 
@@ -336,13 +337,10 @@ class v8LocalizationLoss:
     
     def points_decode(self, anchor_points, pred_offsets):
         """Decode predicted object bounding box coordinates from anchor points and distribution."""
-        if self.use_dfl:
-            b, a, c = pred_offsets.shape  # batch, anchors, channels
-            pred_offsets = pred_offsets.view(b, a, 2, c // 2).softmax(3)
-            pred_offsets = (pred_offsets * 2) - 1
-            pred_offsets = pred_offsets.matmul(self.proj.type(pred_offsets.dtype))
-            # pred_dist = pred_dist.view(b, a, c // 4, 4).transpose(2,3).softmax(3).matmul(self.proj.type(pred_dist.dtype))
-            # pred_dist = (pred_dist.view(b, a, c // 4, 4).softmax(2) * self.proj.type(pred_dist.dtype).view(1, 1, -1, 1)).sum(2)
+        b, a, c = pred_offsets.shape  # batch, anchors, channels
+        pred_offsets = pred_offsets.view(b, a, 2, c // 2).softmax(3)
+        pred_offsets = (pred_offsets * 2) - 1
+        pred_offsets = pred_offsets.matmul(self.proj.type(pred_offsets.dtype))
         return offsets2coords(pred_offsets, anchor_points)
 
     def __call__(self, preds, batch):
@@ -363,7 +361,7 @@ class v8LocalizationLoss:
 
         # Targets
         targets = torch.cat((batch["batch_idx"].view(-1, 1), batch["cls"].view(-1, 1), batch["locations"]), 1)
-        targets = self.preprocess(targets.to(self.device), batch_size, scale_tensor=imgsz[[1, 0, 1, 0]])
+        targets = self.preprocess(targets.to(self.device), batch_size, scale_tensor=imgsz[[1, 0]])  # de-normalizes targets
         gt_labels, gt_locations = targets.split((1, 2), 2)  # cls, xy
         mask_gt = gt_locations.sum(2, keepdim=True).gt_(0)
 
@@ -375,7 +373,8 @@ class v8LocalizationLoss:
             anchor_points * stride_tensor,
             gt_labels,
             gt_locations,
-            mask_gt,
+            mask_gt, 
+            self.radii
         )
 
         target_scores_sum = max(target_scores.sum(), 1)

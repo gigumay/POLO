@@ -49,18 +49,15 @@ def cdist_ribera(x, y):
 
 
 if __name__ == "__main__":
-    ####################################### RIBERA COMPARISON ###################################################
+    ####################################### RADIUS-LABEL MAPPING#################################################
     #############################################################################################################
-    image_height = 100  # Example image height
-    image_width = 100   # Example image width
-    sample_size_1 = 4  # Number of pixels in the first sample
-    sample_size_2 = 4  # Number of pixels in the second sample
+
+    radii = {0: 5, 1: 3, 2: 1, 3: 0}
+
+    labels = torch.randint(4, (3, 2, 2))
 
     
-    dist_abs, dist_norm, dist_abs_ribera, dist_norm_ribera = pairwise_px_dist(image_height, image_width, sample_size_1, sample_size_2)
 
-    assert torch.equal(dist_abs, dist_abs_ribera)
-    assert torch.equal(dist_norm, dist_norm_ribera)
 
 
 
@@ -76,6 +73,20 @@ if __name__ == "__main__":
 
 
     """
+
+    ####################################### RIBERA COMPARISON ###################################################
+    #############################################################################################################
+    image_height = 100  # Example image height
+    image_width = 100   # Example image width
+    sample_size_1 = 4  # Number of pixels in the first sample
+    sample_size_2 = 4  # Number of pixels in the second sample
+
+    
+    dist_abs, dist_norm, dist_abs_ribera, dist_norm_ribera = pairwise_px_dist(image_height, image_width, sample_size_1, sample_size_2)
+
+    assert torch.equal(dist_abs, dist_abs_ribera)
+    assert torch.equal(dist_norm, dist_norm_ribera)
+
 
     ####################################### DOR #################################################################
     #############################################################################################################
