@@ -289,7 +289,7 @@ def smooth_BCE(eps=0.1):
     return 1.0 - 0.5 * eps, 0.5 * eps
 
 
-def loc_dor_pw(loc1, loc2, radius):
+def loc_dor_pw(loc1, loc2, radii):
     """
     Calculate the pairwise distance-over-radius (DoR) of locations. Both sets of locations are expected to be in
     (x, y) format.
@@ -298,16 +298,16 @@ def loc_dor_pw(loc1, loc2, radius):
     Args:
         loc1 (torch.Tensor): A tensor of shape (N, 2) representing N locations
         loc2 (torch.Tensor): A tensor of shape (M, 2) representing M locations.
-        radius (float): Float specifying the radius to use for the DoR calculation.
+        radii (torch.Tensor): A tensor (N, 1) specifying the radii to use for the DoR calculation.
     Returns:
         (torch.Tensor): An NxM tensor containing the pairwise DoR values for every element in loc1 and loc2.
     """
     pairwise_dist = torch.cdist(loc1, loc2)
-    pw_dor = pairwise_dist / radius
+    pw_dor = pairwise_dist / radii
 
     return pw_dor
 
-def loc_dor(loc1, loc2, radius):
+def loc_dor(loc1, loc2, radii):
     """
     Calculate the Distance-over-Radius (DoR) of loc1 and loc2. Both tensors must have two columns
     (meanign that they are expected in the (x,y) format). loc1 can have either one row or as many as 
@@ -316,13 +316,15 @@ def loc_dor(loc1, loc2, radius):
     Args:
         loc1 (torch.Tensor): A tensor of shape (1 or N, 2) representing 1 or N locations
         loc2 (torch.Tensor): A tensor of shape (N, 2) representing N locations.
-        radius (float): Float specifying the radius to use for the DoR calculation.
+        radii (torch.Tensor): A tensor (1 or N) specifying the radius values
     Returns:
-        (torch.Tensor): An Nx1 tensor containing the DoR values.
+        (torch.Tensor): A tensor (N) containing the DoR values.
 
     """
+    assert len(radii.shape) == 1, "Squeeze radii tensor!" 
+
     euclid_dist = torch.sqrt(((loc1 - loc2) **2).sum(dim=1))
-    dor = euclid_dist / radius
+    dor = euclid_dist / radii
 
     return dor
 

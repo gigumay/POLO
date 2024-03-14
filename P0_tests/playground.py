@@ -1,5 +1,5 @@
 import torch
-from ultralytics.utils.metrics import loc_dor, bbox_iou
+from ultralytics.utils.metrics import loc_dor, loc_dor_pw, bbox_iou
 
 def pairwise_px_dist(image_height, image_width, sample_size_1, sample_size_2):
     total_pixels = image_height * image_width
@@ -49,30 +49,30 @@ def cdist_ribera(x, y):
 
 
 if __name__ == "__main__":
-    ####################################### RADIUS-LABEL MAPPING#################################################
+    ####################################### DOR #################################################################
     #############################################################################################################
-
-    radii = {0: 5, 1: 3, 2: 1, 3: 0}
-
-    labels = torch.randint(4, (3, 2, 2))
+    n_loc1 = 2
+    n_loc2 = 3
 
     
+    loc1 = torch.randint(11, (n_loc1, 2)).float()
+    loc2 = torch.randint(11, (n_loc2, 2)).float()
+    radii = torch.randint(5, (n_loc1,1))
 
-
-
-
-
-
-    
-
-
-
+    test_loc = loc_dor_pw(loc1=loc1, loc2=loc2, radii=radii)
 
 
     print("BP")
 
 
     """
+    ####################################### LE-BROADCASTING #####################################################
+    #############################################################################################################
+
+    values = torch.randint(4, (3, 2, 5))
+    filter = torch.randint(3, (3, 2, 1))
+
+    values_filtered = values.le(filter)
 
     ####################################### RIBERA COMPARISON ###################################################
     #############################################################################################################

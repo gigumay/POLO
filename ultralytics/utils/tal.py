@@ -323,7 +323,7 @@ class LocTaskAlignedAssigner(nn.Module):
             pd_scores, pd_locations, gt_labels, gt_radii, gt_locations, anc_points, mask_gt
         )
 
-        target_gt_idx, fg_mask, mask_pos = self.select_closest_locs(mask_pos, dist_scores, self.n_max_boxes)
+        target_gt_idx, fg_mask, mask_pos = self.select_closest_locs(mask_pos, dist_scores, self.n_max_locs)
 
         # Assigned target
         target_labels, target_locations, target_scores = self.get_targets(gt_labels, gt_locations, target_gt_idx, fg_mask)
@@ -341,7 +341,8 @@ class LocTaskAlignedAssigner(nn.Module):
         """Get in_gts mask, (b, max_num_obj, h*w)."""
         mask_in_radius = self.select_candidates_in_radius(anc_points, gt_locations, gt_radii)
         # Get anchor_align metric, (b, max_num_obj, h*w)
-        align_metric, dist_scores = self.get_loc_metrics(pd_scores, pd_locations, gt_labels, gt_locations, mask_in_radius * mask_gt)
+        align_metric, dist_scores = self.get_loc_metrics(pd_scores, pd_locations, gt_labels, gt_radii, gt_locations, 
+                                                         mask_in_radius * mask_gt)
         # Get topk_metric mask, (b, max_num_obj, h*w)
         mask_topk = self.select_topk_candidates(align_metric, topk_mask=mask_gt.expand(-1, -1, self.topk).bool())
         # Merge all mask to a final mask, (b, max_num_obj, h*w)
@@ -349,7 +350,7 @@ class LocTaskAlignedAssigner(nn.Module):
 
         return mask_pos, align_metric, dist_scores
 
-    def get_loc_metrics(self, pd_scores, pd_locations, gt_labels, gt_locations, mask_gt):
+    def get_loc_metrics(self, pd_scores, pd_locations, gt_labels, gt_radii, gt_locations, mask_gt):
         """Compute alignment metric given predicted and ground truth locations."""
         na = pd_locations.shape[-2]
         mask_gt = mask_gt.bool()  # b, max_num_obj, h*w
@@ -362,10 +363,10 @@ class LocTaskAlignedAssigner(nn.Module):
         # Get the scores of each grid for each gt cls
         loc_scores[mask_gt] = pd_scores[ind[0], :, ind[1]][mask_gt]  # b, max_num_obj, h*w
 
-        # (b, max_num_obj, 1, 2), (b, 1, h*w, 2)
         pd_locs = pd_locations.unsqueeze(1).expand(-1, self.n_max_locs, -1, -1)[mask_gt]
         gt_locs = gt_locations.unsqueeze(2).expand(-1, -1, na, -1)[mask_gt]
-        dist_scores[mask_gt] = 1 / self.loc_dor(gt_locs, pd_locs)   # inverse since high scores a bad
+        gt_rad = gt_radii.unsqueeze(2).expand(-1, -1, na, -1)[mask_gt].squeeze()
+        dist_scores[mask_gt] = 1 / loc_dor(gt_locs, pd_locs, gt_rad)   # inverse since high scores a bad
 
         align_metric = loc_scores.pow(self.alpha) * dist_scores.pow(self.beta)
         return align_metric, dist_scores
@@ -463,7 +464,7 @@ class LocTaskAlignedAssigner(nn.Module):
         Args:
             xy_candidates (Tensor): shape(h*w, 2)
             gt_locations (Tensor): shape(b, n_locations, 2)
-
+            gt_radii (Tensor): shape(b, n_locations, 1)
         Returns:
             (Tensor): shape(b, n_locations, h*w)
         """
@@ -477,29 +478,29 @@ class LocTaskAlignedAssigner(nn.Module):
     
 
     @staticmethod
-    def select_closest_locs(mask_pos, dist_scores, n_max_boxes):
+    def select_closest_locs(mask_pos, dist_scores, n_max_locs):
         """
         If an anchor is assigned to multiple gts, the one with the highest 1/DoR will be selected.
 
         Args:
-            mask_pos (Tensor): shape(b, n_max_boxes, h*w)
-            dist_scores (Tensor): shape(b, n_max_boxes, h*w)
+            mask_pos (Tensor): shape(b, n_max_locs, h*w)
+            dist_scores (Tensor): shape(b, n_max_locs, h*w)
 
         Returns:
             target_gt_idx (Tensor): shape(b, h*w)
             fg_mask (Tensor): shape(b, h*w)
-            mask_pos (Tensor): shape(b, n_max_boxes, h*w)
+            mask_pos (Tensor): shape(b, n_max_locs, h*w)
         """
         # (b, n_max_boxes, h*w) -> (b, h*w)
         fg_mask = mask_pos.sum(-2)
         if fg_mask.max() > 1:  # one anchor is assigned to multiple gt_bboxes
-            mask_multi_gts = (fg_mask.unsqueeze(1) > 1).expand(-1, n_max_boxes, -1)  # (b, n_max_boxes, h*w)
+            mask_multi_gts = (fg_mask.unsqueeze(1) > 1).expand(-1, n_max_locs, -1)  # (b, n_max_locs, h*w)
             max_overlaps_idx = dist_scores.argmax(1)  # (b, h*w)
 
             is_max_overlaps = torch.zeros(mask_pos.shape, dtype=mask_pos.dtype, device=mask_pos.device)
             is_max_overlaps.scatter_(1, max_overlaps_idx.unsqueeze(1), 1)
 
-            mask_pos = torch.where(mask_multi_gts, is_max_overlaps, mask_pos).float()  # (b, n_max_boxes, h*w)
+            mask_pos = torch.where(mask_multi_gts, is_max_overlaps, mask_pos).float()  # (b, n_max_locs, h*w)
             fg_mask = mask_pos.sum(-2)
         # Find each grid serve which gt(index)
         target_gt_idx = mask_pos.argmax(-2)  # (b, h*w)
