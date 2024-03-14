@@ -975,6 +975,7 @@ class Format:
             labels["bboxes"] = torch.from_numpy(instances.bboxes) if nl else torch.zeros((nl, 4)) 
         if self.return_locations:
             labels["locations"] = torch.from_numpy(instances.locations) if nl else torch.zeros((nl, 2))
+            labels["radii"] = torch.from_numpy(labels.pop("radii")) if nl else torch.zeros(nl)
         if self.return_keypoint:
             labels["keypoints"] = torch.from_numpy(instances.keypoints)
         if self.return_obb:

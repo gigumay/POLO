@@ -89,8 +89,8 @@ class YOLODataset(BaseDataset):
                             shape=shape,
                             cls=lb[:, 0:1],  # n, 1
                             bboxes=lb[:, 1:] if not self.use_locations else None,  # n, 4
-                            locations=lb[:, 1:] if self.use_locations else None,  # n, 2
-                            
+                            radii=lb[:, 1:2] if self.use_locations else None,
+                            locations=lb[:, 2:] if self.use_locations else None,  # n, 2
                             segments=segments,
                             keypoints=keypoint,
                             normalized=True,
@@ -221,7 +221,7 @@ class YOLODataset(BaseDataset):
             value = values[i]
             if k == "img":
                 value = torch.stack(value, 0)
-            if k in ["masks", "keypoints", "bboxes", "locations", "cls", "segments", "obb"]:
+            if k in ["masks", "keypoints", "bboxes", "locations", "radii", "cls", "segments", "obb"]:
                 value = torch.cat(value, 0)
             new_batch[k] = value
         new_batch["batch_idx"] = list(new_batch["batch_idx"])

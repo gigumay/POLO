@@ -128,8 +128,8 @@ def verify_image_label(args):
                     assert lb.shape[1] == (5 + nkpt * ndim), f"labels require {(5 + nkpt * ndim)} columns each"
                     points = lb[:, 5:].reshape(-1, ndim)[:, :2]
                 elif location:
-                    assert lb.shape[1] == 3, f"labels require 3 columns, {lb.shape[1]} columns detected"
-                    points = lb[:, 1:]
+                    assert lb.shape[1] == 4, f"labels require 4 columns, {lb.shape[1]} columns detected"
+                    points = lb[:, 2:]
                 else:
                     assert lb.shape[1] == 5, f"labels require 5 columns, {lb.shape[1]} columns detected"
                     points = lb[:, 1:]
@@ -153,7 +153,7 @@ def verify_image_label(args):
                 if keypoint:
                     lb = np.zeros((0, (5 + nkpt * ndim)), dtype=np.float32)
                 elif location:
-                    lb = np.zeros((0, 3), dtype=np.float32)
+                    lb = np.zeros((0, 4), dtype=np.float32)
                 else:
                     lb = np.zeros((0, 5), dtype=np.float32)
                 
@@ -162,7 +162,7 @@ def verify_image_label(args):
             if keypoint:
                 lb = np.zeros((0, (5 + nkpt * ndim)), dtype=np.float32)
             elif location:
-                lb = np.zeros((0, 3), dtype=np.float32)
+                lb = np.zeros((0, 4), dtype=np.float32)
             else:
                 lb = np.zeros((0, 5), dtype=np.float32)
         if keypoint:
@@ -170,7 +170,7 @@ def verify_image_label(args):
             if ndim == 2:
                 kpt_mask = np.where((keypoints[..., 0] < 0) | (keypoints[..., 1] < 0), 0.0, 1.0).astype(np.float32)
                 keypoints = np.concatenate([keypoints, kpt_mask[..., None]], axis=-1)  # (nl, nkpt, 3) 
-        lb = lb[:, :5] if not location else lb[:, :3]   # if statement added for clarity; lb[:, :5] would work too
+        lb = lb[:, :5] if not location else lb[:, :4]   # if statement added for clarity; lb[:, :5] would work too
         return im_file, lb, shape, segments, keypoints, nm, nf, ne, nc, msg
     except Exception as e:
         nc = 1

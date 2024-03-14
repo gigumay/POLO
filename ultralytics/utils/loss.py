@@ -303,7 +303,6 @@ class v8LocalizationLoss:
         """Initializes v8LocalizationLoss with the model, defining model-related properties and BCE loss function."""
         device = next(model.parameters()).device  # get model device
         h = model.args  # hyperparameters
-        radii = model.radii  # radii for each class
         m = model.model[-1]  # Locate() module
         self.bce = nn.BCEWithLogitsLoss(reduction="none")
         self.loc_loss = HausdorffLoss()
@@ -311,7 +310,6 @@ class v8LocalizationLoss:
         self.stride = m.stride  # model strides
         self.nc = m.nc  # number of classes
         self.no = m.no
-        self.radii = radii
         self.reg_max = m.reg_max
         self.device = device
 
@@ -321,18 +319,18 @@ class v8LocalizationLoss:
     def preprocess(self, targets, batch_size, scale_tensor):
         """Preprocesses the target counts and matches with the input batch size to output a tensor."""
         if targets.shape[0] == 0:
-            out = torch.zeros(batch_size, 0, 3, device=self.device)
+            out = torch.zeros(batch_size, 0, 4, device=self.device)
         else:
             i = targets[:, 0]  # image index
             _, counts = i.unique(return_counts=True)
             counts = counts.to(dtype=torch.int32)
-            out = torch.zeros(batch_size, counts.max(), 3, device=self.device)
+            out = torch.zeros(batch_size, counts.max(), 4, device=self.device)
             for j in range(batch_size):
                 matches = i == j
                 n = matches.sum()
                 if n:
                     out[j, :n] = targets[matches, 1:]
-            out[..., 1:3] = out[..., 1:3].mul_(scale_tensor)
+            out[..., 2:4] = out[..., 2:4].mul_(scale_tensor)
         return out
     
     def points_decode(self, anchor_points, pred_offsets):
@@ -360,9 +358,9 @@ class v8LocalizationLoss:
         anchor_points, stride_tensor = make_anchors(feats, self.stride, 0.5)
 
         # Targets
-        targets = torch.cat((batch["batch_idx"].view(-1, 1), batch["cls"].view(-1, 1), batch["locations"]), 1)
+        targets = torch.cat((batch["batch_idx"].view(-1, 1), batch["cls"].view(-1, 1), batch["radii"].view(-1, 1), batch["locations"]), 1)
         targets = self.preprocess(targets.to(self.device), batch_size, scale_tensor=imgsz[[1, 0]])  # de-normalizes targets
-        gt_labels, gt_locations = targets.split((1, 2), 2)  # cls, xy
+        gt_labels, gt_radii, gt_locations = targets.split((1,1, 2), 2)  # cls, xy
         mask_gt = gt_locations.sum(2, keepdim=True).gt_(0)
 
         pred_locations = self.points_decode(anchor_points, pred_offsets)
@@ -372,9 +370,9 @@ class v8LocalizationLoss:
             (pred_locations.detach() * stride_tensor).type(gt_locations.dtype),
             anchor_points * stride_tensor,
             gt_labels,
+            gt_radii,
             gt_locations,
-            mask_gt, 
-            self.radii
+            mask_gt 
         )
 
         target_scores_sum = max(target_scores.sum(), 1)
