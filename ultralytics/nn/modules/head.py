@@ -129,24 +129,24 @@ class Locate(nn.Module):
             self.shape = shape
 
         if self.export and self.format in ("saved_model", "pb", "tflite", "edgetpu", "tfjs"):  # avoid TF FlexSplitV ops
-            box = x_cat[:, : self.reg_max * 2]
+            offsets = x_cat[:, : self.reg_max * 2]
             cls = x_cat[:, self.reg_max * 2 :]
         else:
             # location.shape = [reg_max*2, n_anchors]
             # cls.shape = [nc, n_anchors]
-            location, cls = x_cat.split((self.reg_max * 2, self.nc), 1)
+            offsets, cls = x_cat.split((self.reg_max * 2, self.nc), 1)
 
         if self.export and self.format in ("tflite", "edgetpu"):
             # Precompute normalization factor to increase numerical stability
             # See https://github.com/ultralytics/ultralytics/issues/7371
             grid_h = shape[2]
             grid_w = shape[3]
-            grid_size = torch.tensor([grid_w, grid_h, grid_w, grid_h], device=location.device).reshape(1, 4, 1)
+            grid_size = torch.tensor([grid_w, grid_h, grid_w, grid_h], device=offsets.device).reshape(1, 4, 1)
             norm = self.strides / (self.stride[0] * grid_size)
-            loc = self.decode_locs(self.locInf(location) * norm, self.anchors.unsqueeze(0) * norm[:, :2])
+            loc = self.decode_offsets(self.locInf(offsets) * norm, self.anchors.unsqueeze(0) * norm[:, :2])
         else:
             # loc -> [2, n_anchors]
-            loc = self.decode_points(self.locInf(location), self.anchors.unsqueeze(0)) * self.strides 
+            loc = self.decode_offsets(self.locInf(offsets), self.anchors.unsqueeze(0)) * self.strides 
 
         y = torch.cat((loc, cls.sigmoid()), 1)
         return y if self.export else (y, x)
@@ -160,9 +160,9 @@ class Locate(nn.Module):
             a[-1].bias.data[:] = 1.0  # pt
             b[-1].bias.data[: m.nc] = math.log(5 / m.nc / (640 / s) ** 2)  # cls (.01 objects, 80 classes, 640 img)
 
-    def decode_locs(self, pts, anchors):
-        """Decode locations."""
-        return offsets2coords(pts, anchors)
+    def decode_offsets(self, offsets, anchors):
+        """Decode offsets to get locations"""
+        return offsets2coords(offsets, anchors)
 
     
 

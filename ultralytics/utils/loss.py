@@ -333,7 +333,7 @@ class v8LocalizationLoss:
             out[..., 2:4] = out[..., 2:4].mul_(scale_tensor)
         return out
     
-    def points_decode(self, anchor_points, pred_offsets):
+    def offsets_decode(self, anchor_points, pred_offsets):
         """Decode predicted object bounding box coordinates from anchor points and distribution."""
         b, a, c = pred_offsets.shape  # batch, anchors, channels
         pred_offsets = pred_offsets.view(b, a, 2, c // 2).softmax(3)
@@ -363,7 +363,7 @@ class v8LocalizationLoss:
         gt_labels, gt_radii, gt_locations = targets.split((1,1, 2), 2)  # cls, xy
         mask_gt = gt_locations.sum(2, keepdim=True).gt_(0)
 
-        pred_locations = self.points_decode(anchor_points, pred_offsets)
+        pred_locations = self.offsets_decode(anchor_points, pred_offsets)
 
         _, target_locations, target_scores, fg_mask, _ = self.assigner(
             pred_scores.detach().sigmoid(),
