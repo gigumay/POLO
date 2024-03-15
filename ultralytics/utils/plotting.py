@@ -204,6 +204,43 @@ class Annotator:
                     lineType=cv2.LINE_AA,
                 )
 
+    def loc_label(self, loc, label="", color=(128, 128, 128), txt_color=(255, 255, 255)):
+        """Add one xy loc to image with label."""
+        if isinstance(loc, torch.Tensor):
+            loc = loc.tolist()
+        if self.pil or not is_ascii(label):
+            # define bbox that will contain ellipse (hardcoding a radius of 4 for now)
+            bbox_tl = (loc[0] - 4, loc[0] - 4)
+            bbox_br = (loc[0] + 4, loc[0] + 4)
+            self.draw.ellipse([bbox_tl, bbox_br], width=self.lw, outline=color)  # ellipse
+            if label:
+                w, h = self.font.getsize(label)  # text width, height
+                outside = bbox_tl - h >= 0  # label fits outside box
+                self.draw.rectangle(
+                    (bbox_tl[0], bbox_tl[1] - h if outside else bbox_tl[1], bbox_tl[0] + w + 1, bbox_tl[1] + 1 if outside else bbox_tl[1] + h + 1),
+                    fill=color,
+                )
+                # self.draw.text((box[0], box[1]), label, fill=txt_color, font=self.font, anchor='ls')  # for PIL>8.0
+                self.draw.text((bbox_tl[0], bbox_tl[1] - h if outside else bbox_tl[1]), label, fill=txt_color, font=self.font)
+        else:  # cv2
+            cv2.circle(self.im, center=(int(loc[0]), int(loc[1])), radius=4, color=color, thickness=self.lw, lineType=cv2.LINE_AA)
+            if label:
+                w, h = cv2.getTextSize(label, 0, fontScale=self.sf, thickness=self.tf)[0]  # text width, height
+                p1 = [loc[0] - 4, loc[1] - 4]
+                outside = loc[1] - 4 - h >= 3
+                p2 = p1[0] + w, p1[1] - h - 3 if outside else p1[1] + h + 3
+                cv2.rectangle(self.im, p1, p2, color, -1, cv2.LINE_AA)  # filled
+                cv2.putText(
+                    self.im,
+                    label,
+                    (p1[0], p1[1] - 2 if outside else p1[1] + h + 2),
+                    0,
+                    self.sf,
+                    txt_color,
+                    thickness=self.tf,
+                    lineType=cv2.LINE_AA,
+                )
+
     def masks(self, masks, colors, im_gpu, alpha=0.5, retina_masks=False):
         """
         Plot masks on image.
@@ -735,6 +772,7 @@ def plot_images(
     batch_idx,
     cls,
     bboxes=np.zeros(0, dtype=np.float32),
+    locations=np.zeros(0, dtype=np.float32),
     confs=None,
     masks=np.zeros(0, dtype=np.uint8),
     kpts=np.zeros((0, 51), dtype=np.float32),
@@ -753,6 +791,8 @@ def plot_images(
         cls = cls.cpu().numpy()
     if isinstance(bboxes, torch.Tensor):
         bboxes = bboxes.cpu().numpy()
+    if isinstance(locations, torch.Tensor):
+        locations = locations.cpu().numpy()
     if isinstance(masks, torch.Tensor):
         masks = masks.cpu().numpy().astype(int)
     if isinstance(kpts, torch.Tensor):
@@ -813,6 +853,24 @@ def plot_images(
                     if labels or conf[j] > conf_thres:
                         label = f"{c}" if labels else f"{c} {conf[j]:.1f}"
                         annotator.box_label(box, label, color=color, rotated=is_obb)
+
+            elif len(locations):
+                locs = locations[idx]
+                conf = confs[idx] if confs is not None else None  # check for confidence presence (label vs pred)
+                if locs[:, :2].max() <= 1.1:   # if normalized with tolerance 0.1
+                    locs[:, 0] *= w     # scale to pixels
+                    locs[:, 1] *= h
+                elif scale < 1: # absolute coords need scale if image scales
+                    locs[:, :2] *= 2
+                locs[:, 0] += x
+                locs[:, 1] += y
+                for j, loc in enumerate(locs.astype(np.int64).tolist()):
+                    c = classes[j]
+                    color = colors(c)
+                    c = names.get(c, c) if names else c
+                    if labels or conf[j] > conf_thres:
+                        label = f"{c}" if labels else f"{c} {conf[j]:.1f}"
+                        annotator.loc_label(loc, label, color=color)
 
             elif len(classes):
                 for c in classes:
