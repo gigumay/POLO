@@ -215,7 +215,7 @@ class Annotator:
             self.draw.ellipse([bbox_tl, bbox_br], width=self.lw, outline=color)  # ellipse
             if label:
                 w, h = self.font.getsize(label)  # text width, height
-                outside = bbox_tl - h >= 0  # label fits outside box
+                outside = bbox_tl[1] - h >= 0  # label fits outside box
                 self.draw.rectangle(
                     (bbox_tl[0], bbox_tl[1] - h if outside else bbox_tl[1], bbox_tl[0] + w + 1, bbox_tl[1] + 1 if outside else bbox_tl[1] + h + 1),
                     fill=color,
@@ -702,14 +702,16 @@ def plot_labels_loc(locations, cls, names=(), save_dir=Path(""), on_plot=None):
     locations = locations[:1000000]  # limit to 1M labels
 
     # Matplotlib labels
-    y = plt.hist(cls, bins=np.linspace(0, nc, nc + 1) - 0.5, rwidth=0.8)
+    _, ax = plt.subplots(tight_layout=True)
+    y = ax.hist(cls, bins=np.linspace(0, nc, nc + 1) - 0.5, rwidth=0.8)
     for i in range(nc):
         y[2].patches[i].set_color([x / 255 for x in colors(i)])
-    plt.ylabel("instances")
+    ax.set_ylabel("instances")
     if 0 < len(names) < 30:
-        plt.xticks(range(len(names)), labels=list(names.values()), rotation=90, fontsize=10)
+        ax.set_xticks(range(len(names)))
+        ax.set_xticklabels(list(names.values()), rotation=90, fontsize=10)
     else:
-        plt.xlabel("classes")
+        ax.set_xlabel("classes")
 
     fname = save_dir / "labels.jpg"
     plt.savefig(fname, dpi=200)
