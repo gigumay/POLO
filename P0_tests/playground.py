@@ -1,5 +1,109 @@
 import torch
 from ultralytics.utils.metrics import loc_dor, loc_dor_pw, bbox_iou
+from torchvision.ops.boxes import box_iou
+
+def nms_tut(bboxes: torch.Tensor, scores: torch.Tensor, iou_threshold: float) -> torch.Tensor:
+    order = torch.argsort(-scores).to("cuda")
+    indices = torch.arange(bboxes.shape[0], device="cuda")
+    keep = torch.ones_like(indices, dtype=torch.bool, device="cuda")
+    for i in indices:
+        if keep[i]:
+            bbox = bboxes[order[i]]
+            iou = box_iou(bbox[None,...],(bboxes[order[i + 1:]]) * keep[i + 1:][...,None])
+            overlapped = torch.nonzero(iou > iou_threshold)
+            keep[overlapped + i + 1] = 0
+    return order[keep]
+
+def nms_gpt(dets: torch.Tensor, scores: torch.Tensor, iou_threshold: float) -> torch.Tensor:
+
+    if dets.numel() == 0:
+        return torch.empty((0,), dtype=torch.long, device=dets.device)
+
+    x1_t = dets[:, 0]
+    y1_t = dets[:, 1]
+    x2_t = dets[:, 2]
+    y2_t = dets[:, 3]
+
+    areas_t = (x2_t - x1_t) * (y2_t - y1_t)
+
+    _, order_t = scores.sort(dim=0, descending=True)
+    ndets = dets.size(0)
+    suppressed_t = torch.zeros(ndets, dtype=torch.uint8, device=dets.device)
+    keep_t = torch.zeros(ndets, dtype=torch.long, device=dets.device)
+
+    num_to_keep = 0
+
+    for _i in range(ndets):
+        i = order_t[_i]
+        if suppressed_t[i] == 1:
+            continue
+        keep_t[num_to_keep] = i
+        num_to_keep += 1
+        ix1 = x1_t[i]
+        iy1 = y1_t[i]
+        ix2 = x2_t[i]
+        iy2 = y2_t[i]
+        iarea = areas_t[i]
+
+        for _j in range(_i + 1, ndets):
+            j = order_t[_j]
+            if suppressed_t[j] == 1:
+                continue
+            xx1 = max(ix1, x1_t[j])
+            yy1 = max(iy1, y1_t[j])
+            xx2 = min(ix2, x2_t[j])
+            yy2 = min(iy2, y2_t[j])
+
+            w = max(0, xx2 - xx1)
+            h = max(0, yy2 - yy1)
+            inter = w * h
+            ovr = inter / (iarea + areas_t[j] - inter)
+            if ovr > iou_threshold:
+                suppressed_t[j] = 1
+
+    return keep_t[:num_to_keep]
+
+def nms_gpt_vec(dets: torch.Tensor, scores: torch.Tensor, iou_threshold: float) -> torch.Tensor:
+
+    if dets.numel() == 0:
+        return torch.empty((0,), dtype=torch.long, device=dets.device)
+
+    x1_t, y1_t, x2_t, y2_t = dets[:, 0], dets[:, 1], dets[:, 2], dets[:, 3]
+    areas_t = (x2_t - x1_t) * (y2_t - y1_t)
+
+    _, order_t = scores.sort(dim=0, descending=True)
+    ndets = dets.size(0)
+
+    ix1, iy1, ix2, iy2 = x1_t[order_t], y1_t[order_t], x2_t[order_t], y2_t[order_t]
+    iarea = areas_t[order_t]
+
+    xx1 = torch.maximum(ix1.unsqueeze(1), x1_t.unsqueeze(0))
+    yy1 = torch.maximum(iy1.unsqueeze(1), y1_t.unsqueeze(0))
+    xx2 = torch.minimum(ix2.unsqueeze(1), x2_t.unsqueeze(0))
+    yy2 = torch.minimum(iy2.unsqueeze(1), y2_t.unsqueeze(0))
+
+    w = torch.maximum(torch.zeros_like(xx2), xx2 - xx1)
+    h = torch.maximum(torch.zeros_like(yy2), yy2 - yy1)
+    inter = w * h
+    ovr = inter / (iarea.unsqueeze(1) + areas_t.unsqueeze(0) - inter)
+    
+    # Initialize a mask to identify boxes to keep
+    suppress_mask = torch.zeros(ndets, dtype=torch.bool, device=dets.device)
+
+    # Loop through the IoU matrix and update suppression mask
+    for i in range(ndets):
+        if not suppress_mask[i]:
+            suppress_mask |= (ovr[i] > iou_threshold)
+
+    # Invert the suppression mask to get indices of boxes to keep
+    keep_indices = (~suppress_mask).nonzero().squeeze()
+
+    # Get original indices from the sorted order
+    keep_t = order_t[keep_indices]
+
+    return keep_t
+
+
 
 def pairwise_px_dist(image_height, image_width, sample_size_1, sample_size_2):
     total_pixels = image_height * image_width

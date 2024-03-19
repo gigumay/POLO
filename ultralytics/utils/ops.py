@@ -1,5 +1,11 @@
 # Ultralytics YOLO 🚀, AGPL-3.0 license
 
+# DEBUG 
+import sys
+sys.path.append("/home/giacomo/projects/P0_YOLOcate")
+
+from P0_tests.playground import *
+
 import contextlib
 import math
 import re
@@ -280,6 +286,13 @@ def non_max_suppression(
         else:
             boxes = x[:, :4] + c  # boxes (offset by class)
             i = torchvision.ops.nms(boxes, scores, iou_thres)  # NMS
+            # DEBUG
+            k = nms_gpt_vec(boxes, scores, iou_thres)
+            z = nms_tut(boxes, scores, iou_thres)
+
+            if not torch.equal(i, z) or not torch.equal(i, k):
+                print(f"WARNING:\n c++: {i.shape}\n torch_vec: {k.shape}\n torch_tut: {z.shape}")
+
         i = i[:max_det]  # limit detections
 
         # # Experimental
@@ -297,7 +310,8 @@ def non_max_suppression(
         output[xi] = x[i]
         if (time.time() - t) > time_limit:
             LOGGER.warning(f"WARNING ⚠️ NMS time limit {time_limit:.3f}s exceeded")
-            break  # time limit exceeded
+            #DEBUG 
+            #break  # time limit exceeded
 
     return output
 

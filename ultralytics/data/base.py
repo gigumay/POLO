@@ -131,6 +131,7 @@ class BaseDataset(Dataset):
                 cls = self.labels[i]["cls"]
                 bboxes = self.labels[i]["bboxes"]
                 locations = self.labels[i]["locations"]
+                radii = self.labels[i]["radii"]
                 segments = self.labels[i]["segments"]
                 keypoints = self.labels[i]["keypoints"]
                 j = (cls == include_class_array).any(1)
@@ -139,6 +140,7 @@ class BaseDataset(Dataset):
                     self.labels[i]["bboxes"] = bboxes[j]
                 if locations is not None:
                     self.labels[i]["locations"] = locations[j]
+                    self.labels[i]["radii"] = radii[j]
                 if segments:
                     self.labels[i]["segments"] = [segments[si] for si, idx in enumerate(j) if idx]
                 if keypoints is not None:

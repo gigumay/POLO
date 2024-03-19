@@ -195,6 +195,9 @@ class YOLODataset(BaseDataset):
         """
         bboxes = label.pop("bboxes")
         locations = label.pop("locations")
+        # remove radii if not used
+        if not self.use_locations:
+            _ = label.pop("radii", None)
         segments = label.pop("segments", [])
         keypoints = label.pop("keypoints", None)
         bbox_format = label.pop("bbox_format")
