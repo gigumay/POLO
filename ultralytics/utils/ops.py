@@ -288,10 +288,10 @@ def non_max_suppression(
             i = torchvision.ops.nms(boxes, scores, iou_thres)  # NMS
             # DEBUG
             k = nms_gpt_vec(boxes, scores, iou_thres)
-            z = nms_tut(boxes, scores, iou_thres)
+            # z = nms_gpt(boxes, scores, iou_thres)
 
-            if not torch.equal(i, z) or not torch.equal(i, k):
-                print(f"WARNING:\n c++: {i.shape}\n torch_vec: {k.shape}\n torch_tut: {z.shape}")
+            if not torch.equal(i, k):
+                print(f"WARNING:\n c++: {i.shape}\n torch_vec: {k.shape}")
 
         i = i[:max_det]  # limit detections
 
@@ -308,8 +308,8 @@ def non_max_suppression(
         #         i = i[iou.sum(1) > 1]  # require redundancy
 
         output[xi] = x[i]
-        if (time.time() - t) > time_limit:
-            LOGGER.warning(f"WARNING ⚠️ NMS time limit {time_limit:.3f}s exceeded")
+        #if (time.time() - t) > time_limit:
+            #LOGGER.warning(f"WARNING ⚠️ NMS time limit {time_limit:.3f}s exceeded")
             #DEBUG 
             #break  # time limit exceeded
 

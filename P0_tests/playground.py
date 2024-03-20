@@ -1,6 +1,7 @@
 import torch
 from ultralytics.utils.metrics import loc_dor, loc_dor_pw, bbox_iou
 from torchvision.ops.boxes import box_iou
+from torchvision.ops import nms
 
 def nms_tut(bboxes: torch.Tensor, scores: torch.Tensor, iou_threshold: float) -> torch.Tensor:
     order = torch.argsort(-scores).to("cuda")
@@ -63,46 +64,80 @@ def nms_gpt(dets: torch.Tensor, scores: torch.Tensor, iou_threshold: float) -> t
 
     return keep_t[:num_to_keep]
 
-def nms_gpt_vec(dets: torch.Tensor, scores: torch.Tensor, iou_threshold: float) -> torch.Tensor:
+def nms_gpt_vec(dets: torch.Tensor, scores: torch.Tensor, iou_thres: float) -> torch.Tensor:
 
     if dets.numel() == 0:
         return torch.empty((0,), dtype=torch.long, device=dets.device)
-
-    x1_t, y1_t, x2_t, y2_t = dets[:, 0], dets[:, 1], dets[:, 2], dets[:, 3]
-    areas_t = (x2_t - x1_t) * (y2_t - y1_t)
-
-    _, order_t = scores.sort(dim=0, descending=True)
-    ndets = dets.size(0)
-
-    ix1, iy1, ix2, iy2 = x1_t[order_t], y1_t[order_t], x2_t[order_t], y2_t[order_t]
-    iarea = areas_t[order_t]
-
-    xx1 = torch.maximum(ix1.unsqueeze(1), x1_t.unsqueeze(0))
-    yy1 = torch.maximum(iy1.unsqueeze(1), y1_t.unsqueeze(0))
-    xx2 = torch.minimum(ix2.unsqueeze(1), x2_t.unsqueeze(0))
-    yy2 = torch.minimum(iy2.unsqueeze(1), y2_t.unsqueeze(0))
-
-    w = torch.maximum(torch.zeros_like(xx2), xx2 - xx1)
-    h = torch.maximum(torch.zeros_like(yy2), yy2 - yy1)
-    inter = w * h
-    ovr = inter / (iarea.unsqueeze(1) + areas_t.unsqueeze(0) - inter)
     
-    # Initialize a mask to identify boxes to keep
-    suppress_mask = torch.zeros(ndets, dtype=torch.bool, device=dets.device)
+    _, order = scores.sort(dim=0, descending=True)
 
-    # Loop through the IoU matrix and update suppression mask
+    x1 = dets[:, 0][order]
+    y1 = dets[:, 1][order]
+    x2 = dets[:, 2][order]
+    y2 = dets[:, 3][order]
+
+    areas = (x2 - x1) * (y2 - y1)
+
+    
+    ndets = dets.size(0)
+    suppressed = torch.zeros(ndets, dtype=torch.bool, device=dets.device)
+    keep = torch.zeros(ndets, dtype=torch.long, device=dets.device)
+
+    num_to_keep = 0
+
     for i in range(ndets):
-        if not suppress_mask[i]:
-            suppress_mask |= (ovr[i] > iou_threshold)
+        if suppressed[order[i]]:
+            continue
+        keep[num_to_keep] = order[i]
+        num_to_keep += 1
+       
+        x1_max = torch.maximum(x1[i], x1[i+1:])
+        y1_max = torch.maximum(y1[i], y1[i+1:])
+        x2_min = torch.minimum(x2[i], x2[i+1:])
+        y2_min = torch.minimum(y2[i], y2[i+1:])
+        
+        w = (x2_min - x1_max).clamp(min=0)
+        h = (y2_min - y1_max).clamp(min=0)
+        inter = w * h
+        ovr = inter / ((areas[i] + areas[i+1:]) - inter)
 
-    # Invert the suppression mask to get indices of boxes to keep
-    keep_indices = (~suppress_mask).nonzero().squeeze()
+        suppress_ind = (ovr > iou_thres).nonzero().squeeze() + (i + 1)
+        suppressed[order[suppress_ind]] = True
 
-    # Get original indices from the sorted order
-    keep_t = order_t[keep_indices]
+    return keep[:num_to_keep]
 
-    return keep_t
 
+def nms_gpt_vec2(dets: torch.Tensor, scores: torch.Tensor, iou_thres: float) -> torch.Tensor:
+    if dets.numel() == 0:
+        return torch.empty((0,), dtype=torch.long, device=dets.device)
+    
+    _, order = scores.sort(dim=0, descending=True)
+
+    x1 = dets[:, 0][order]
+    y1 = dets[:, 1][order]
+    x2 = dets[:, 2][order]
+    y2 = dets[:, 3][order]
+
+    areas = (x2 - x1) * (y2 - y1)
+
+    xx1 = torch.maximum(x1.view(-1, 1), x1.view(1, -1))
+    yy1 = torch.maximum(y1.view(-1, 1), y1.view(1, -1))
+    xx2 = torch.minimum(x2.view(-1, 1), x2.view(1, -1))
+    yy2 = torch.minimum(y2.view(-1, 1), y2.view(1, -1))
+    
+    w = (xx2 - xx1).clamp(min=0)
+    h = (yy2 - yy1).clamp(min=0)
+    inter = w * h
+    ious = inter / ((areas.view(-1, 1) + areas.view(1, -1)) - inter)
+
+    mask = (ious > iou_thres)
+    mask = mask.triu(diagonal=1)
+
+    suppressed = mask.any(dim=0)
+
+    keep = (~suppressed).nonzero().squeeze()
+
+    return order[keep]
 
 
 def pairwise_px_dist(image_height, image_width, sample_size_1, sample_size_2):
@@ -153,6 +188,20 @@ def cdist_ribera(x, y):
 
 
 if __name__ == "__main__":
+    
+    bxs = torch.randint(10,(2,4))
+    scores = torch.randint(10, (2,1)).squeeze()
+    iou_thres = 0.7
+    
+
+    nms_gpt_vec(bxs, scores, iou_thres)
+    nms_gpt(bxs, scores, iou_thres)
+
+
+    print("BP")
+
+
+    """
     ####################################### DOR #################################################################
     #############################################################################################################
     n_loc1 = 2
@@ -165,11 +214,6 @@ if __name__ == "__main__":
 
     test_loc = loc_dor_pw(loc1=loc1, loc2=loc2, radii=radii)
 
-
-    print("BP")
-
-
-    """
     ####################################### LE-BROADCASTING #####################################################
     #############################################################################################################
 
