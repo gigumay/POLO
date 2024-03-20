@@ -18,7 +18,7 @@ import torch.nn.functional as F
 import torchvision
 
 from ultralytics.utils import LOGGER
-from ultralytics.utils.metrics import batch_probiou
+from ultralytics.utils.metrics import batch_probiou, loc_dor_pw
 
 
 class Profile(contextlib.ContextDecorator):
@@ -287,11 +287,11 @@ def non_max_suppression(
             boxes = x[:, :4] + c  # boxes (offset by class)
             i = torchvision.ops.nms(boxes, scores, iou_thres)  # NMS
             # DEBUG
-            k = nms_gpt_vec(boxes, scores, iou_thres)
-            # z = nms_gpt(boxes, scores, iou_thres)
+            k = nms_gpt_vec2(boxes, scores, iou_thres)
+            #z = nms_tut(boxes, scores, iou_thres)
 
             if not torch.equal(i, k):
-                print(f"WARNING:\n c++: {i.shape}\n torch_vec: {k.shape}")
+                print(f"WARNING:\n c++: {i}\n torch_vec: {k}")
 
         i = i[:max_det]  # limit detections
 
@@ -315,18 +315,52 @@ def non_max_suppression(
 
     return output
 
-def loc_nms(
+def loc_nms(preds, scores, dor_thres) -> torch.Tensor:
+    """
+    PyTorch version of NMS as implemented in C++ in the torch package. Adjusted 
+    for localizations. Significantly slower!
+
+    Arguments: 
+        dets (torch.Tensor): A tensor (N, 2) containing the predicted locations.
+        scores (torch.Tensor): A Tensor (N, 1) containing the prediction confidence scores.
+        dor_thresh (float): Float specifying the DoR for suppressing redundant localizations. 
+    Returns:
+        (torch.Tensor): A tensor containing the indices of the locations to keep.
+    """
+    if preds.numel() == 0:
+        return torch.empty((0,), dtype=torch.long, device=preds.device)
+
+    _, order = scores.sort(dim=0, descending=True)
+    ndets = preds.shape[0]
+    suppress_ind = torch.zeros(ndets, dtype=torch.bool, device=preds.device)
+    
+    locs_ordered = preds[order]
+    dor_matrix = loc_dor_pw(locs_ordered, locs_ordered)
+
+    suppress_m = (dor_matrix < dor_thres).triu(diagonal=1)
+
+    for i in range(ndets):
+        if suppress_ind[i] == 1:
+            continue
+
+        suppress_ind[suppress_m[i].nonzero()] = True
+
+    keep_ind = (~suppress_ind).nonzero()
+    if keep_ind.numel() > 1:
+        keep_ind.squeeze_(1)
+
+    return order[keep_ind]
+
+def non_max_suppression_loc(
     prediction,
     conf_thres=0.25,
-    dor_thres=1.0,
+    dor_thres=0.3,
     classes=None,
     agnostic=False,
     multi_label=False,
     labels=(),
     max_det=300,
     nc=0,  # number of classes (optional)
-    max_time_img=0.05,
-    max_nms=30000,
     in_place=True,
 ):
     """
@@ -338,7 +372,7 @@ def loc_nms(
             output by a model, such as YOLO.
         conf_thres (float): The confidence threshold below which locations will be filtered out.
             Valid values are between 0.0 and 1.0.
-        dor_thres (float): The IoU threshold below which boxes will be filtered out during NMS.
+        dor_thres (float): The DoR threshold below which locations will be filtered out during NMS.
             Valid values are between 0.0 and 1.0.
         classes (List[int]): A list of class indices to consider. If None, all classes will be considered.
         agnostic (bool): If True, the model is agnostic to the number of classes, and all
@@ -349,14 +383,11 @@ def loc_nms(
             output by a dataloader, with each label being a tuple of (class_index, x, y).
         max_det (int): The maximum number of locations to keep after NMS.
         nc (int, optional): The number of classes output by the model. Any indices after this will be considered masks.
-        max_time_img (float): The maximum time (seconds) for processing one image.
-        max_nms (int): The maximum number of locations into torchvision.ops.nms().
         in_place (bool): If True, the input prediction tensor will be modified in place.
 
     Returns:
         (List[torch.Tensor]): A list of length batch_size, where each element is a tensor of
-            shape (num_boxes, 4) containing the kept locations, with columns
-            (x, y, confidence, class).
+            shape (num_locs, 4) containing the kept locations, with columns (x, y, confidence, class).
     """
 
     # Checks
@@ -370,10 +401,8 @@ def loc_nms(
     xc = prediction[:, 2:].amax(1) > conf_thres  # candidates
 
     # Settings
-    time_limit = 2.0 + max_time_img * bs  # seconds to quit after
     multi_label &= nc > 1  # multiple labels per box (adds 0.5ms/img)
 
-    t = time.time()
     output = [torch.zeros((0, 4), device=prediction.device)] * bs
     for xi, x in enumerate(prediction):  # image index, image inference
         x = x[xc[xi]]  # confidence
@@ -423,9 +452,6 @@ def loc_nms(
         i = i[:max_det]  # limit detections
 
         output[xi] = x[i]
-        if (time.time() - t) > time_limit:
-            LOGGER.warning(f"WARNING ⚠️ NMS time limit {time_limit:.3f}s exceeded")
-            break  # time limit exceeded
 
     return output
 

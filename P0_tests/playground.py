@@ -64,81 +64,33 @@ def nms_gpt(dets: torch.Tensor, scores: torch.Tensor, iou_threshold: float) -> t
 
     return keep_t[:num_to_keep]
 
-def nms_gpt_vec(dets: torch.Tensor, scores: torch.Tensor, iou_thres: float) -> torch.Tensor:
-
-    if dets.numel() == 0:
-        return torch.empty((0,), dtype=torch.long, device=dets.device)
-    
-    _, order = scores.sort(dim=0, descending=True)
-
-    x1 = dets[:, 0][order]
-    y1 = dets[:, 1][order]
-    x2 = dets[:, 2][order]
-    y2 = dets[:, 3][order]
-
-    areas = (x2 - x1) * (y2 - y1)
-
-    
-    ndets = dets.size(0)
-    suppressed = torch.zeros(ndets, dtype=torch.bool, device=dets.device)
-    keep = torch.zeros(ndets, dtype=torch.long, device=dets.device)
-
-    num_to_keep = 0
-
-    for i in range(ndets):
-        if suppressed[order[i]]:
-            continue
-        keep[num_to_keep] = order[i]
-        num_to_keep += 1
-       
-        x1_max = torch.maximum(x1[i], x1[i+1:])
-        y1_max = torch.maximum(y1[i], y1[i+1:])
-        x2_min = torch.minimum(x2[i], x2[i+1:])
-        y2_min = torch.minimum(y2[i], y2[i+1:])
-        
-        w = (x2_min - x1_max).clamp(min=0)
-        h = (y2_min - y1_max).clamp(min=0)
-        inter = w * h
-        ovr = inter / ((areas[i] + areas[i+1:]) - inter)
-
-        suppress_ind = (ovr > iou_thres).nonzero().squeeze() + (i + 1)
-        suppressed[order[suppress_ind]] = True
-
-    return keep[:num_to_keep]
-
 
 def nms_gpt_vec2(dets: torch.Tensor, scores: torch.Tensor, iou_thres: float) -> torch.Tensor:
     if dets.numel() == 0:
         return torch.empty((0,), dtype=torch.long, device=dets.device)
-    
+
     _, order = scores.sort(dim=0, descending=True)
-
-    x1 = dets[:, 0][order]
-    y1 = dets[:, 1][order]
-    x2 = dets[:, 2][order]
-    y2 = dets[:, 3][order]
-
-    areas = (x2 - x1) * (y2 - y1)
-
-    xx1 = torch.maximum(x1.view(-1, 1), x1.view(1, -1))
-    yy1 = torch.maximum(y1.view(-1, 1), y1.view(1, -1))
-    xx2 = torch.minimum(x2.view(-1, 1), x2.view(1, -1))
-    yy2 = torch.minimum(y2.view(-1, 1), y2.view(1, -1))
+    ndets = dets.shape[0]
+    suppress_ind = torch.zeros(ndets, dtype=torch.bool, device=dets.device)
     
-    w = (xx2 - xx1).clamp(min=0)
-    h = (yy2 - yy1).clamp(min=0)
-    inter = w * h
-    ious = inter / ((areas.view(-1, 1) + areas.view(1, -1)) - inter)
+    bxs_ordered = dets[order]
+    iou_matrix = box_iou(bxs_ordered, bxs_ordered)
 
-    mask = (ious > iou_thres)
-    mask = mask.triu(diagonal=1)
+    suppress_m = (iou_matrix > iou_thres).triu(diagonal=1)
 
-    suppressed = mask.any(dim=0)
+    for i in range(ndets):
+        if suppress_ind[i] == 1:
+            continue
 
-    keep = (~suppressed).nonzero().squeeze()
+        suppress_ind[suppress_m[i].nonzero()] = True
 
-    return order[keep]
+    keep_ind = (~suppress_ind).nonzero()
+    if keep_ind.numel() > 1:
+        keep_ind.squeeze_(1)
+    else:
+        print("BP")
 
+    return order[keep_ind]
 
 def pairwise_px_dist(image_height, image_width, sample_size_1, sample_size_2):
     total_pixels = image_height * image_width
