@@ -284,14 +284,8 @@ def non_max_suppression(
             boxes = torch.cat((x[:, :2] + c, x[:, 2:4], x[:, -1:]), dim=-1)  # xywhr
             i = nms_rotated(boxes, scores, iou_thres)
         else:
-            boxes = x[:, :4] + c  # boxes (offset by class)
+            boxes = x[:, :4] + c  # boxes (offset by class; https://github.com/ultralytics/yolov5/discussions/5825)
             i = torchvision.ops.nms(boxes, scores, iou_thres)  # NMS
-            # DEBUG
-            k = nms_gpt_vec2(boxes, scores, iou_thres)
-            #z = nms_tut(boxes, scores, iou_thres)
-
-            if not torch.equal(i, k):
-                print(f"WARNING:\n c++: {i}\n torch_vec: {k}")
 
         i = i[:max_det]  # limit detections
 
@@ -308,14 +302,13 @@ def non_max_suppression(
         #         i = i[iou.sum(1) > 1]  # require redundancy
 
         output[xi] = x[i]
-        #if (time.time() - t) > time_limit:
-            #LOGGER.warning(f"WARNING ⚠️ NMS time limit {time_limit:.3f}s exceeded")
-            #DEBUG 
-            #break  # time limit exceeded
+        if (time.time() - t) > time_limit:
+            LOGGER.warning(f"WARNING ⚠️ NMS time limit {time_limit:.3f}s exceeded") 
+            break  # time limit exceeded
 
     return output
 
-def loc_nms(preds, scores, dor_thres) -> torch.Tensor:
+def loc_nms(preds, scores, radii, dor_thres) -> torch.Tensor:
     """
     PyTorch version of NMS as implemented in C++ in the torch package. Adjusted 
     for localizations. Significantly slower!
@@ -335,7 +328,7 @@ def loc_nms(preds, scores, dor_thres) -> torch.Tensor:
     suppress_ind = torch.zeros(ndets, dtype=torch.bool, device=preds.device)
     
     locs_ordered = preds[order]
-    dor_matrix = loc_dor_pw(locs_ordered, locs_ordered)
+    dor_matrix = loc_dor_pw(locs_ordered, locs_ordered, radii)
 
     suppress_m = (dor_matrix < dor_thres).triu(diagonal=1)
 
@@ -356,12 +349,14 @@ def non_max_suppression_loc(
     conf_thres=0.25,
     dor_thres=0.3,
     classes=None,
+    radii=None,
     agnostic=False,
     multi_label=False,
     labels=(),
     max_det=300,
     nc=0,  # number of classes (optional)
-    in_place=True,
+    cls_offset = 100,
+    max_nms=30000,
 ):
     """
     Perform non-maximum suppression (NMS) on a set of locations, with support for multiple labels per point.
@@ -375,6 +370,7 @@ def non_max_suppression_loc(
         dor_thres (float): The DoR threshold below which locations will be filtered out during NMS.
             Valid values are between 0.0 and 1.0.
         classes (List[int]): A list of class indices to consider. If None, all classes will be considered.
+        radii (Dict): Dictionary containing the radius values for each class. 
         agnostic (bool): If True, the model is agnostic to the number of classes, and all
             classes will be considered as one.
         multi_label (bool): If True, each location may have multiple labels.
@@ -383,8 +379,9 @@ def non_max_suppression_loc(
             output by a dataloader, with each label being a tuple of (class_index, x, y).
         max_det (int): The maximum number of locations to keep after NMS.
         nc (int, optional): The number of classes output by the model. Any indices after this will be considered masks.
-        in_place (bool): If True, the input prediction tensor will be modified in place.
-
+        cls_offset (int): The number of pixels by which to shift each class for spatial separation during NMS.
+        max_nms (int): The maximum number of boxes into NMS
+        
     Returns:
         (List[torch.Tensor]): A list of length batch_size, where each element is a tensor of
             shape (num_locs, 4) containing the kept locations, with columns (x, y, confidence, class).
@@ -402,6 +399,7 @@ def non_max_suppression_loc(
 
     # Settings
     multi_label &= nc > 1  # multiple labels per box (adds 0.5ms/img)
+    prediction = prediction.transpose(-1, -2)  # shape(1,84,6300) to shape(1,6300,84)
 
     output = [torch.zeros((0, 4), device=prediction.device)] * bs
     for xi, x in enumerate(prediction):  # image index, image inference
@@ -424,31 +422,30 @@ def non_max_suppression_loc(
 
         if multi_label:
             i, j = torch.where(cls > conf_thres)
-            x = torch.cat((loc[i], x[i, 4 + j, None], j[:, None].float(), mask[i]), 1)
+            x = torch.cat((loc[i], x[i, 2 + j, None], j[:, None].float()), 1)
         else:  # best class only
             conf, j = cls.max(1, keepdim=True)
-            x = torch.cat((box, conf, j.float(), mask), 1)[conf.view(-1) > conf_thres]
+            x = torch.cat((loc, conf, j.float()), 1)[conf.view(-1) > conf_thres]
 
         # Filter by class
         if classes is not None:
-            x = x[(x[:, 5:6] == torch.tensor(classes, device=x.device)).any(1)]
+            x = x[(x[:, 3:4] == torch.tensor(classes, device=x.device)).any(1)]
 
         # Check shape
-        n = x.shape[0]  # number of boxes
-        if not n:  # no boxes
+        n = x.shape[0]  # number of locations
+        if not n:  # no locations
             continue
         if n > max_nms:  # excess boxes
-            x = x[x[:, 4].argsort(descending=True)[:max_nms]]  # sort by confidence and remove excess boxes
+            x = x[x[:, 2].argsort(descending=True)[:max_nms]]  # sort by confidence and remove excess locations
 
         # Batched NMS
-        c = x[:, 5:6] * (0 if agnostic else max_wh)  # classes
-        scores = x[:, 4]  # scores
-        if rotated:
-            boxes = torch.cat((x[:, :2] + c, x[:, 2:4], x[:, -1:]), dim=-1)  # xywhr
-            i = nms_rotated(boxes, scores, iou_thres)
-        else:
-            boxes = x[:, :4] + c  # boxes (offset by class)
-            i = torchvision.ops.nms(boxes, scores, iou_thres)  # NMS
+        c = x[:, 3:4] * (0 if agnostic else cls_offset)  # classes
+        # as seen on https://stackoverflow.com/questions/73650652/how-to-apply-function-element-wise-to-2d-tensor
+        radii_np = np.vectorize(lambda x: radii[x])(x[:, 3:4].cpu())
+        radii_t = torch.from_numpy(radii_np).to("cuda")
+        scores = x[:, 2]  # scores
+        locs = x[:, :2] + c  # locations (offset by class)
+        i = loc_nms(locs, scores, radii_t, dor_thres)  # NMS
         i = i[:max_det]  # limit detections
 
         output[xi] = x[i]
