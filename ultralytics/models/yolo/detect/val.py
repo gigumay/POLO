@@ -104,14 +104,14 @@ class DetectionValidator(BaseValidator):
         if len(cls):
             bbox = ops.xywh2xyxy(bbox) * torch.tensor(imgsz, device=self.device)[[1, 0, 1, 0]]  # target boxes
              # native-space labels (i.e. pixel coords in the original image)
-            ops.scale_boxes(imgsz, bbox, ori_shape, ratio_pad=ratio_pad) 
+            ops.scale_boxes(imgsz, bbox, ori_shape, ratio_pad=ratio_pad, padding=False) 
         return dict(cls=cls, bbox=bbox, ori_shape=ori_shape, imgsz=imgsz, ratio_pad=ratio_pad)
 
     def _prepare_pred(self, pred, pbatch):
         """Prepares a batch of images and annotations for validation."""
         predn = pred.clone()
         ops.scale_boxes(
-            pbatch["imgsz"], predn[:, :4], pbatch["ori_shape"], ratio_pad=pbatch["ratio_pad"]
+            pbatch["imgsz"], predn[:, :4], pbatch["ori_shape"], ratio_pad=pbatch["ratio_pad"], padding=False
         )  # native-space pred
         return predn
 

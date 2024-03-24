@@ -321,7 +321,6 @@ def non_max_suppression(
         else:
             boxes = x[:, :4] + c  # boxes (offset by class; https://github.com/ultralytics/yolov5/discussions/5825)
             i = torchvision.ops.nms(boxes, scores, iou_thres)  # NMS
-            k = nms_gpt_vec2(boxes, scores, iou_thres)
 
         i = i[:max_det]  # limit detections
 
@@ -340,7 +339,7 @@ def non_max_suppression(
         output[xi] = x[i]
         if (time.time() - t) > time_limit:
             LOGGER.warning(f"WARNING ⚠️ NMS time limit {time_limit:.3f}s exceeded") 
-            break  # time limit exceeded
+            #break  # time limit exceeded
 
     return output
 

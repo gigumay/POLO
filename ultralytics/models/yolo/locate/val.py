@@ -10,7 +10,7 @@ from ultralytics.data import build_dataloader, build_yolo_dataset, converter
 from ultralytics.engine.validator import BaseValidator
 from ultralytics.utils import LOGGER, ops
 from ultralytics.utils.checks import check_requirements
-from ultralytics.utils.metrics import ConfusionMatrix, LocMetrics, box_iou
+from ultralytics.utils.metrics import ConfusionMatrix, LocMetrics, loc_dor_pw
 from ultralytics.utils.plotting import output_to_target, plot_images
 
 
@@ -99,20 +99,20 @@ class LocalizationValidator(BaseValidator):
         """Prepares a batch of images and annotations for validation."""
         idx = batch["batch_idx"] == si
         cls = batch["cls"][idx].squeeze(-1)
-        bbox = batch["bboxes"][idx]
+        location = batch["locations"][idx]
         ori_shape = batch["ori_shape"][si]
         imgsz = batch["img"].shape[2:]
         ratio_pad = batch["ratio_pad"][si]
         if len(cls):
-            bbox = ops.xywh2xyxy(bbox) * torch.tensor(imgsz, device=self.device)[[1, 0, 1, 0]]  # target boxes
-            ops.scale_boxes(imgsz, bbox, ori_shape, ratio_pad=ratio_pad)  # native-space labels
-        return dict(cls=cls, bbox=bbox, ori_shape=ori_shape, imgsz=imgsz, ratio_pad=ratio_pad)
+            location *= torch.tensor(imgsz, device=self.device)[[1, 0]]  # target locations
+            ops.scale_locations(imgsz, location, ori_shape, ratio_pad=ratio_pad, padding=False)  # native-space labels
+        return dict(cls=cls, location=location, ori_shape=ori_shape, imgsz=imgsz, ratio_pad=ratio_pad)
 
     def _prepare_pred(self, pred, pbatch):
         """Prepares a batch of images and annotations for validation."""
         predn = pred.clone()
-        ops.scale_boxes(
-            pbatch["imgsz"], predn[:, :4], pbatch["ori_shape"], ratio_pad=pbatch["ratio_pad"]
+        ops.scale_locations(
+            pbatch["imgsz"], predn[:, :2], pbatch["ori_shape"], ratio_pad=pbatch["ratio_pad"], padding=False
         )  # native-space pred
         return predn
 
@@ -127,7 +127,7 @@ class LocalizationValidator(BaseValidator):
                 tp=torch.zeros(npr, self.niou, dtype=torch.bool, device=self.device),
             )
             pbatch = self._prepare_batch(si, batch)
-            cls, bbox = pbatch.pop("cls"), pbatch.pop("bbox")
+            cls, location = pbatch.pop("cls"), pbatch.pop("location")
             nl = len(cls)
             stat["target_cls"] = cls
             if npr == 0:
@@ -135,21 +135,21 @@ class LocalizationValidator(BaseValidator):
                     for k in self.stats.keys():
                         self.stats[k].append(stat[k])
                     if self.args.plots:
-                        self.confusion_matrix.process_batch(detections=None, gt_bboxes=bbox, gt_cls=cls)
+                        self.confusion_matrix.process_batch_loc(detections=None, gt_locs=location, gt_cls=cls)
                 continue
 
             # Predictions
             if self.args.single_cls:
-                pred[:, 5] = 0
+                pred[:, 3] = 0
             predn = self._prepare_pred(pred, pbatch)
-            stat["conf"] = predn[:, 4]
-            stat["pred_cls"] = predn[:, 5]
+            stat["conf"] = predn[:, 2]
+            stat["pred_cls"] = predn[:, 3]
 
             # Evaluate
             if nl:
-                stat["tp"] = self._process_batch(predn, bbox, cls)
+                stat["tp"] = self._process_batch(predn, location, cls)
                 if self.args.plots:
-                    self.confusion_matrix.process_batch(predn, bbox, cls)
+                    self.confusion_matrix.process_batch_loc(predn, location, cls)
             for k in self.stats.keys():
                 self.stats[k].append(stat[k])
 
@@ -193,21 +193,21 @@ class LocalizationValidator(BaseValidator):
                     save_dir=self.save_dir, names=self.names.values(), normalize=normalize, on_plot=self.on_plot
                 )
 
-    def _process_batch(self, detections, gt_bboxes, gt_cls):
+    def _process_batch(self, detections, gt_locations, gt_cls):
         """
         Return correct prediction matrix.
 
         Args:
-            detections (torch.Tensor): Tensor of shape [N, 6] representing detections.
-                Each detection is of the format: x1, y1, x2, y2, conf, class.
+            detections (torch.Tensor): Tensor of shape [N, 4] representing detections.
+                Each detection is of the format: x,y, conf, class.
             labels (torch.Tensor): Tensor of shape [M, 5] representing labels.
                 Each label is of the format: class, x1, y1, x2, y2.
 
         Returns:
             (torch.Tensor): Correct prediction matrix of shape [N, 10] for 10 IoU levels.
         """
-        iou = box_iou(gt_bboxes, detections[:, :4])
-        return self.match_predictions(detections[:, 5], gt_cls, iou)
+        dor = loc_dor_pw(gt_locations, detections[:, :2])
+        return self.match_predictions(detections[:, 3], gt_cls, dor)
 
     def build_dataset(self, img_path, mode="val", batch=None):
         """
