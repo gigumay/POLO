@@ -48,6 +48,7 @@ save_json: False # (bool) save results to JSON file
 save_hybrid: False # (bool) save hybrid version of labels (labels + additional predictions)
 conf: # (float, optional) object confidence threshold for detection (default 0.25 predict, 0.001 val)
 iou: 0.7 # (float) intersection over union (IoU) threshold for NMS
+dor: 0.3 # (float) distance over radius (DoR) threshold for NMS
 max_det: 300 # (int) maximum number of detections per image
 half: False # (bool) use half precision (FP16)
 dnn: False # (bool) use OpenCV DNN for ONNX inference

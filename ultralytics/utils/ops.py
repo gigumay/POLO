@@ -129,6 +129,41 @@ def scale_boxes(img1_shape, boxes, img0_shape, ratio_pad=None, padding=True, xyw
     boxes[..., :4] /= gain
     return clip_boxes(boxes, img0_shape)
 
+def scale_locations(img1_shape, locations, img0_shape, ratio_pad=None, padding=True):
+    """
+    Rescales locations from the shape of the image they were originally specified in (img1_shape) 
+    to the shape of a different image (img0_shape).
+
+    Args:
+        img1_shape (tuple): The shape of the image that the locations are for, in the format of (height, width).
+        locations (torch.Tensor): the locations of the objects in the image, in the format of (x1, y1, x2, y2)
+        img0_shape (tuple): the shape of the target image, in the format of (height, width).
+        ratio_pad (tuple): a tuple of (ratio, pad) for scaling the locations. If not provided, the ratio and pad will be
+            calculated based on the size difference between the two images.
+        padding (bool): If True, assuming the locations are based on image augmented by yolo style. If False then do regular
+            rescaling.
+
+    Returns:
+        locations (torch.Tensor): The scaled locations
+    """
+    if ratio_pad is None:  # calculate from img0_shape
+        gain = min(img1_shape[0] / img0_shape[0], img1_shape[1] / img0_shape[1])  # gain  = old / new
+        pad = (
+            round((img1_shape[1] - img0_shape[1] * gain) / 2 - 0.1),
+            round((img1_shape[0] - img0_shape[0] * gain) / 2 - 0.1),
+        )  # wh padding
+    else:
+        gain = ratio_pad[0][0]
+        pad = ratio_pad[1]
+
+    if padding:
+        locations[..., 0] -= pad[0]  # x padding
+        locations[..., 1] -= pad[1]  # y padding
+
+    locations[..., :2] /= gain
+    return clip_locations(locations, img0_shape)
+
+
 
 def make_divisible(x, divisor):
     """
@@ -286,6 +321,7 @@ def non_max_suppression(
         else:
             boxes = x[:, :4] + c  # boxes (offset by class; https://github.com/ultralytics/yolov5/discussions/5825)
             i = torchvision.ops.nms(boxes, scores, iou_thres)  # NMS
+            k = nms_gpt_vec2(boxes, scores, iou_thres)
 
         i = i[:max_det]  # limit detections
 
@@ -473,6 +509,24 @@ def clip_boxes(boxes, shape):
         boxes[..., [1, 3]] = boxes[..., [1, 3]].clip(0, shape[0])  # y1, y2
     return boxes
 
+
+def clip_locations(locations, shape):
+    """
+    Takes a list of locations and a shape (height, width) and removes the locations that lie outside 
+    of the shape.
+
+    Args:
+        locations (torch.Tensor): the locations to clip
+        shape (tuple): the shape of the image
+
+    Returns:
+        (torch.Tensor | numpy.ndarray): remaining locations
+    """
+    good = (locations[:, 0] < shape[1]) & (locations[:, 1] < shape[0])
+    if not torch.any(good):
+        print("WARNING ⚠️: clipping in 'ops.py' removed all locations!")
+    
+    return locations[good]
 
 def clip_coords(coords, shape):
     """

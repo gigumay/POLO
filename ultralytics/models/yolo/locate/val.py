@@ -28,12 +28,13 @@ class LocalizationValidator(BaseValidator):
         ```
     """
 
-    def __init__(self, dataloader=None, save_dir=None, pbar=None, args=None, _callbacks=None):
+    def __init__(self, dataloader=None, radii=None, save_dir=None, pbar=None, args=None, _callbacks=None):
         """Initialize detection model with necessary variables and settings."""
         super().__init__(dataloader, save_dir, pbar, args, _callbacks)
         self.nt_per_class = None
         self.is_coco = False
         self.class_map = None
+        self.radii = radii
         self.args.task = "locate"
         self.metrics = LocMetrics(save_dir=self.save_dir, on_plot=self.on_plot)
         self.dorv = torch.linspace(1.0, 0.1, 10)  # dor vector for mAP@1:0.1
@@ -79,14 +80,15 @@ class LocalizationValidator(BaseValidator):
 
     def get_desc(self):
         """Return a formatted string summarizing class metrics of YOLO model."""
-        return ("%22s" + "%11s" * 6) % ("Class", "Images", "Instances", "Box(P", "R", "mAP50", "mAP50-95)")
+        return ("%22s" + "%11s" * 6) % ("Class", "Images", "Instances", "Loc(P", "R", "mAP100", "mAP100-10)")
 
     def postprocess(self, preds):
         """Apply Non-maximum suppression to prediction outputs."""
-        return ops.non_max_suppression(
+        return ops.non_max_suppression_loc(
             preds,
             self.args.conf,
-            self.args.iou,
+            self.args.dor,
+            self.radii,
             labels=self.lb,
             multi_label=True,
             agnostic=self.args.single_cls,

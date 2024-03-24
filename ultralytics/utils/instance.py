@@ -6,6 +6,7 @@ from numbers import Number
 from typing import List
 
 import numpy as np
+import torch
 
 from .ops import ltwh2xywh, ltwh2xyxy, xywh2ltwh, xywh2xyxy, xyxy2ltwh, xyxy2xywh
 
@@ -370,6 +371,8 @@ class Instances:
                 self.convert_bbox(format=ori_format)
         if self.locations is not None:
             good = (self.locations[:, 0] < w) & (self.locations[:, 1] < h)
+            if not torch.any(good):
+                print("WARNING ⚠️: clipping in 'instances.py' removed all locations!")
             self.locations = self.locations[good]
         if self.segments is not None:
             self.segments[..., 0] = self.segments[..., 0].clip(0, w)
