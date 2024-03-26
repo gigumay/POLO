@@ -105,14 +105,14 @@ class LocalizationValidator(BaseValidator):
         ratio_pad = batch["ratio_pad"][si]
         if len(cls):
             location *= torch.tensor(imgsz, device=self.device)[[1, 0]]  # target locations
-            ops.scale_locations(imgsz, location, ori_shape, ratio_pad=ratio_pad, padding=False)  # native-space labels
+            ops.scale_locations(imgsz, location, ori_shape, ratio_pad=ratio_pad)  # native-space labels
         return dict(cls=cls, location=location, ori_shape=ori_shape, imgsz=imgsz, ratio_pad=ratio_pad)
 
     def _prepare_pred(self, pred, pbatch):
         """Prepares a batch of images and annotations for validation."""
         predn = pred.clone()
         ops.scale_locations(
-            pbatch["imgsz"], predn[:, :2], pbatch["ori_shape"], ratio_pad=pbatch["ratio_pad"], padding=False
+            pbatch["imgsz"], predn[:, :2], pbatch["ori_shape"], ratio_pad=pbatch["ratio_pad"]
         )  # native-space pred
         return predn
 
@@ -207,6 +207,7 @@ class LocalizationValidator(BaseValidator):
             (torch.Tensor): Correct prediction matrix of shape [N, 10] for 10 IoU levels.
         """
         dor = loc_dor_pw(gt_locations, detections[:, :2])
+        CONTINUE HERE, CHECK DEFINITION 
         return self.match_predictions(detections[:, 3], gt_cls, dor)
 
     def build_dataset(self, img_path, mode="val", batch=None):
