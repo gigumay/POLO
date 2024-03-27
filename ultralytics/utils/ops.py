@@ -164,7 +164,6 @@ def scale_locations(img1_shape, locations, img0_shape, ratio_pad=None, padding=T
     return clip_locations(locations, img0_shape)
 
 
-
 def make_divisible(x, divisor):
     """
     Returns the nearest number that is divisible by the given divisor.
@@ -981,7 +980,6 @@ def scale_coords(img1_shape, coords, img0_shape, ratio_pad=None, normalize=False
         coords[..., 0] /= img0_shape[1]  # width
         coords[..., 1] /= img0_shape[0]  # height
     return coords
-
 
 def regularize_rboxes(rboxes):
     """

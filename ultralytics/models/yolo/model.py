@@ -42,7 +42,7 @@ class YOLO(Model):
                 "model": LocalizationModel,
                 "trainer": yolo.locate.LocalizationTrainer,
                 "validator": yolo.locate.LocalizationValidator,
-                "predictor": yolo.detect.DetectionPredictor,
+                "predictor": yolo.locate.LocalizationPredictor,
             },
             "segment": {
                 "model": SegmentationModel,

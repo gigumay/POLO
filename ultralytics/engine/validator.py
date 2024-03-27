@@ -88,7 +88,6 @@ class BaseValidator:
         self.confusion_matrix = None
         self.nc = None
         self.iouv = None
-        self.dor = None
         self.jdict = None
         self.speed = {"preprocess": 0.0, "inference": 0.0, "loss": 0.0, "postprocess": 0.0}
 
