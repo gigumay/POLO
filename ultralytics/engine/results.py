@@ -70,6 +70,7 @@ class Results(SimpleClass):
     Attributes:
         orig_img (numpy.ndarray): Original image as a numpy array.
         orig_shape (tuple): Original image shape in (height, width) format.
+        locations (Locations, optional): Object containing detection locations.
         boxes (Boxes, optional): Object containing detection bounding boxes.
         masks (Masks, optional): Object containing detection masks.
         probs (Probs, optional): Object containing class probabilities for classification tasks.
@@ -79,7 +80,7 @@ class Results(SimpleClass):
         path (str): Path to the image file.
 
     Methods:
-        update(boxes=None, masks=None, probs=None, obb=None): Updates object attributes with new detection results.
+        update(boxes=None, locations=None, masks=None, probs=None, obb=None): Updates object attributes with new detection results.
         cpu(): Returns a copy of the Results object with all tensors on CPU memory.
         numpy(): Returns a copy of the Results object with all tensors as numpy arrays.
         cuda(): Returns a copy of the Results object with all tensors on GPU memory.
@@ -94,7 +95,7 @@ class Results(SimpleClass):
         tojson(normalize=False): Converts detection results to JSON format.
     """
 
-    def __init__(self, orig_img, path, names, boxes=None, masks=None, probs=None, keypoints=None, obb=None) -> None:
+    def __init__(self, orig_img, path, names, boxes=None, locations=None, masks=None, probs=None, keypoints=None, obb=None) -> None:
         """
         Initialize the Results class.
 
@@ -103,6 +104,7 @@ class Results(SimpleClass):
             path (str): The path to the image file.
             names (dict): A dictionary of class names.
             boxes (torch.tensor, optional): A 2D tensor of bounding box coordinates for each detection.
+            locations (torch.tensor, optional): A 2D tensor of location coordinates for each detection.
             masks (torch.tensor, optional): A 3D tensor of detection masks, where each mask is a binary image.
             probs (torch.tensor, optional): A 1D tensor of probabilities of each class for classification task.
             keypoints (torch.tensor, optional): A 2D tensor of keypoint coordinates for each detection.
@@ -111,6 +113,7 @@ class Results(SimpleClass):
         self.orig_img = orig_img
         self.orig_shape = orig_img.shape[:2]
         self.boxes = Boxes(boxes, self.orig_shape) if boxes is not None else None  # native size boxes
+        self.locations = (Locations, self.orig_shape) if locations is not None else None # native size locations
         self.masks = Masks(masks, self.orig_shape) if masks is not None else None  # native size or imgsz masks
         self.probs = Probs(probs) if probs is not None else None
         self.keypoints = Keypoints(keypoints, self.orig_shape) if keypoints is not None else None
@@ -119,7 +122,7 @@ class Results(SimpleClass):
         self.names = names
         self.path = path
         self.save_dir = None
-        self._keys = "boxes", "masks", "probs", "keypoints", "obb"
+        self._keys = "boxes", "locations", "masks", "probs", "keypoints", "obb"
 
     def __getitem__(self, idx):
         """Return a Results object for the specified index."""
@@ -132,10 +135,12 @@ class Results(SimpleClass):
             if v is not None:
                 return len(v)
 
-    def update(self, boxes=None, masks=None, probs=None, obb=None):
+    def update(self, boxes=None, locations=None, masks=None, probs=None, obb=None):
         """Update the boxes, masks, and probs attributes of the Results object."""
         if boxes is not None:
             self.boxes = Boxes(ops.clip_boxes(boxes, self.orig_shape), self.orig_shape)
+        if locations is not None:
+            self.locations = Locations(ops.clip_locations(locations, self.orig_shape), self.orig_shape)
         if masks is not None:
             self.masks = Masks(masks, self.orig_shape)
         if probs is not None:
@@ -196,6 +201,8 @@ class Results(SimpleClass):
         kpt_line=True,
         labels=True,
         boxes=True,
+        locations=True,
+        loc_radius=5,
         masks=True,
         probs=True,
         show=False,
@@ -217,6 +224,7 @@ class Results(SimpleClass):
             kpt_line (bool): Whether to draw lines connecting keypoints.
             labels (bool): Whether to plot the label of bounding boxes.
             boxes (bool): Whether to plot the bounding boxes.
+            locations (bool): Whether to plot the locations.
             masks (bool): Whether to plot the masks.
             probs (bool): Whether to plot classification probability
             show (bool): Whether to display the annotated image directly.
@@ -246,6 +254,7 @@ class Results(SimpleClass):
         names = self.names
         is_obb = self.obb is not None
         pred_boxes, show_boxes = self.obb if is_obb else self.boxes, boxes
+        pred_locs, show_locs = self.locations, locations
         pred_masks, show_masks = self.masks, masks
         pred_probs, show_probs = self.probs, probs
         annotator = Annotator(
@@ -280,6 +289,16 @@ class Results(SimpleClass):
                 box = d.xyxyxyxy.reshape(-1, 4, 2).squeeze() if is_obb else d.xyxy.squeeze()
                 annotator.box_label(box, label, color=colors(c, True), rotated=is_obb)
 
+        # Plot Localization results
+        if pred_locs is not None and show_locs:
+            for d in reversed(pred_locs):
+                c, conf, id = int(d.cls), float(d.conf) if conf else None, None if d.id is None else int(d.id.item())
+                name = ("" if id is None else f"id:{id} ") + names[c]
+                label = (f"{name} {conf:.2f}" if conf else name) if labels else None
+                loc = d.xy
+                annotator.loc_label(loc, label, color=colors(c, True))
+
+CONTINUE HERE
         # Plot Classify results
         if pred_probs is not None and show_probs:
             text = ",\n".join(f"{names[j] if names else j} {pred_probs.data[j]:.2f}" for j in pred_probs.top5)
@@ -505,6 +524,78 @@ class Boxes(BaseTensor):
         xywh[..., [0, 2]] /= self.orig_shape[1]
         xywh[..., [1, 3]] /= self.orig_shape[0]
         return xywh
+    
+class Locations(BaseTensor):
+    """
+    Manages detection locations, providing easy access and manipulation of location coordinates, confidence scores, class
+    identifiers, and optional tracking IDs. Supports multiple formats for location coordinates, including both absolute and
+    normalized forms.
+
+    Attributes:
+        data (torch.Tensor): The raw tensor containing detection locatons and their associated data.
+        orig_shape (tuple): The original image size as a tuple (height, width), used for normalization.
+        is_track (bool): Indicates whether tracking IDs are included in the location data.
+
+    Properties:
+        xy (torch.Tensor | numpy.ndarray): xy coordinates of locations
+        xyn (torch.Tensor | numpy.ndarray): normalized xy coordinates of locations.
+        conf (torch.Tensor | numpy.ndarray): Confidence scores for each location.
+        cls (torch.Tensor | numpy.ndarray): Class labels for each location.
+        id (torch.Tensor | numpy.ndarray, optional): Tracking IDs for each box, if available.
+
+    Methods:
+        cpu(): Moves the locations to CPU memory.
+        numpy(): Converts the locations to a numpy array format.
+        cuda(): Moves the locations to CUDA (GPU) memory.
+        to(device, dtype=None): Moves the locations to the specified device.
+    """
+
+    def __init__(self, locations, orig_shape) -> None:
+        """
+        Initialize the Locations class.
+
+        Args:
+            locations (torch.Tensor | numpy.ndarray): A tensor or numpy array containing the detection locations, with
+                shape (num_locs, 4) or (num_locs, 5). The last two columns contain confidence and class values.
+                If present, the third last column contains track IDs.
+            orig_shape (tuple): Original image size, in the format (height, width).
+        """
+        if locations.ndim == 1:
+            locations = locations[None, :]
+        n = locations.shape[-1]
+        assert n in (4, 5), f"expected 4 or 5 values but got {n}"  # xy, track_id, conf, cls
+        super().__init__(locations, orig_shape)
+        self.is_track = n == 5
+        self.orig_shape = orig_shape
+
+    @property
+    def xy(self):
+        """Return the locations in xy format."""
+        return self.data[:, :2]
+
+    @property
+    def conf(self):
+        """Return the confidence values of the locations."""
+        return self.data[:, -2]
+
+    @property
+    def cls(self):
+        """Return the class values of the locations."""
+        return self.data[:, -1]
+
+    @property
+    def id(self):
+        """Return the track IDs of the locations (if available)."""
+        return self.data[:, -3] if self.is_track else None
+
+    @property
+    @lru_cache(maxsize=2)
+    def xyn(self):
+        """Return the locations in xy format normalized by original image size."""
+        xy = self.xy.clone() if isinstance(self.xy, torch.Tensor) else np.copy(self.xy)
+        xy[..., 0] /= self.orig_shape[1]
+        xy[..., 1] /= self.orig_shape[0]
+        return xy
 
 
 class Masks(BaseTensor):

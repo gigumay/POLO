@@ -204,14 +204,14 @@ class Annotator:
                     lineType=cv2.LINE_AA,
                 )
 
-    def loc_label(self, loc, label="", color=(128, 128, 128), txt_color=(255, 255, 255)):
+    def loc_label(self, loc, loc_radius=5,label="", color=(128, 128, 128), txt_color=(255, 255, 255)):
         """Add one xy loc to image with label."""
         if isinstance(loc, torch.Tensor):
             loc = loc.tolist()
         if self.pil or not is_ascii(label):
             # define bbox that will contain ellipse (hardcoding a radius of 4 for now)
-            bbox_tl = (loc[0] - 4, loc[0] - 4)
-            bbox_br = (loc[0] + 4, loc[0] + 4)
+            bbox_tl = (loc[0] - loc_radius, loc[0] - loc_radius)
+            bbox_br = (loc[0] + loc_radius, loc[0] + loc_radius)
             self.draw.ellipse([bbox_tl, bbox_br], width=self.lw, outline=color)  # ellipse
             if label:
                 w, h = self.font.getsize(label)  # text width, height
@@ -223,11 +223,11 @@ class Annotator:
                 # self.draw.text((box[0], box[1]), label, fill=txt_color, font=self.font, anchor='ls')  # for PIL>8.0
                 self.draw.text((bbox_tl[0], bbox_tl[1] - h if outside else bbox_tl[1]), label, fill=txt_color, font=self.font)
         else:  # cv2
-            cv2.circle(self.im, center=(int(loc[0]), int(loc[1])), radius=4, color=color, thickness=self.lw, lineType=cv2.LINE_AA)
+            cv2.circle(self.im, center=(int(loc[0]), int(loc[1])), radius=loc, color=color, thickness=self.lw, lineType=cv2.LINE_AA)
             if label:
                 w, h = cv2.getTextSize(label, 0, fontScale=self.sf, thickness=self.tf)[0]  # text width, height
                 p1 = [loc[0] - 4, loc[1] - 4]
-                outside = loc[1] - 4 - h >= 3
+                outside = loc[1] - h >= 3
                 p2 = p1[0] + w, p1[1] - h - 3 if outside else p1[1] + h + 3
                 cv2.rectangle(self.im, p1, p2, color, -1, cv2.LINE_AA)  # filled
                 cv2.putText(
