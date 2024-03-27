@@ -11,7 +11,7 @@ from ultralytics.engine.validator import BaseValidator
 from ultralytics.utils import LOGGER, ops
 from ultralytics.utils.checks import check_requirements
 from ultralytics.utils.metrics import ConfusionMatrix, LocMetrics, loc_dor_pw
-from ultralytics.utils.plotting import output_to_target, plot_images
+from ultralytics.utils.plotting import output_to_target_loc, plot_images
 
 
 class LocalizationValidator(BaseValidator):
@@ -194,21 +194,8 @@ class LocalizationValidator(BaseValidator):
                 )
 
     def _process_batch(self, detections, gt_locations, gt_cls):
-        """
-        Return correct prediction matrix.
-
-        Args:
-            detections (torch.Tensor): Tensor of shape [N, 4] representing detections.
-                Each detection is of the format: x,y, conf, class.
-            labels (torch.Tensor): Tensor of shape [M, 5] representing labels.
-                Each label is of the format: class, x1, y1, x2, y2.
-
-        Returns:
-            (torch.Tensor): Correct prediction matrix of shape [N, 10] for 10 IoU levels.
-        """
         dor = loc_dor_pw(gt_locations, detections[:, :2])
-        CONTINUE HERE, CHECK DEFINITION 
-        return self.match_predictions(detections[:, 3], gt_cls, dor)
+        return self.match_predictions_loc(detections[:, 3], gt_cls, dor)
 
     def build_dataset(self, img_path, mode="val", batch=None):
         """
@@ -232,7 +219,7 @@ class LocalizationValidator(BaseValidator):
             batch["img"],
             batch["batch_idx"],
             batch["cls"].squeeze(-1),
-            batch["bboxes"],
+            batch["locations"],
             paths=batch["im_file"],
             fname=self.save_dir / f"val_batch{ni}_labels.jpg",
             names=self.names,
@@ -240,10 +227,10 @@ class LocalizationValidator(BaseValidator):
         )
 
     def plot_predictions(self, batch, preds, ni):
-        """Plots predicted bounding boxes on input images and saves the result."""
+        """Plots predicted locations on input images and saves the result."""
         plot_images(
             batch["img"],
-            *output_to_target(preds, max_det=self.args.max_det),
+            *output_to_target_loc(preds, max_det=self.args.max_det),
             paths=batch["im_file"],
             fname=self.save_dir / f"val_batch{ni}_pred.jpg",
             names=self.names,
@@ -252,10 +239,10 @@ class LocalizationValidator(BaseValidator):
 
     def save_one_txt(self, predn, save_conf, shape, file):
         """Save YOLO detections to a txt file in normalized coordinates in a specific format."""
-        gn = torch.tensor(shape)[[1, 0, 1, 0]]  # normalization gain whwh
-        for *xyxy, conf, cls in predn.tolist():
-            xywh = (ops.xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
-            line = (cls, *xywh, conf) if save_conf else (cls, *xywh)  # label format
+        gn = torch.tensor(shape)[[1, 0]]  # normalization gain whwh
+        for *xy, conf, cls in predn.tolist():
+            xy = (xy / gn).view(-1).tolist()  # normalized xywh
+            line = (cls, *xy, conf) if save_conf else (cls, *xy)  # label format
             with open(file, "a") as f:
                 f.write(("%g " * len(line)).rstrip() % line + "\n")
 
@@ -263,40 +250,13 @@ class LocalizationValidator(BaseValidator):
         """Serialize YOLO predictions to COCO json format."""
         stem = Path(filename).stem
         image_id = int(stem) if stem.isnumeric() else stem
-        box = ops.xyxy2xywh(predn[:, :4])  # xywh
-        box[:, :2] -= box[:, 2:] / 2  # xy center to top-left corner
-        for p, b in zip(predn.tolist(), box.tolist()):
+        loc = predn[:, :2]  # xy
+        for p, l in zip(predn.tolist(), loc.tolist()):
             self.jdict.append(
                 {
                     "image_id": image_id,
-                    "category_id": self.class_map[int(p[5])],
-                    "bbox": [round(x, 3) for x in b],
-                    "score": round(p[4], 5),
+                    "category_id": self.class_map[int(p[3])],
+                    "location": [round(x, 3) for x in l],
+                    "score": round(p[2], 5),
                 }
             )
-
-    def eval_json(self, stats):
-        """Evaluates YOLO output in JSON format and returns performance statistics."""
-        if self.args.save_json and self.is_coco and len(self.jdict):
-            anno_json = self.data["path"] / "annotations/instances_val2017.json"  # annotations
-            pred_json = self.save_dir / "predictions.json"  # predictions
-            LOGGER.info(f"\nEvaluating pycocotools mAP using {pred_json} and {anno_json}...")
-            try:  # https://github.com/cocodataset/cocoapi/blob/master/PythonAPI/pycocoEvalDemo.ipynb
-                check_requirements("pycocotools>=2.0.6")
-                from pycocotools.coco import COCO  # noqa
-                from pycocotools.cocoeval import COCOeval  # noqa
-
-                for x in anno_json, pred_json:
-                    assert x.is_file(), f"{x} file not found"
-                anno = COCO(str(anno_json))  # init annotations api
-                pred = anno.loadRes(str(pred_json))  # init predictions api (must pass string, not Path)
-                eval = COCOeval(anno, pred, "bbox")
-                if self.is_coco:
-                    eval.params.imgIds = [int(Path(x).stem) for x in self.dataloader.dataset.im_files]  # images to eval
-                eval.evaluate()
-                eval.accumulate()
-                eval.summarize()
-                stats[self.metrics.keys[-1]], stats[self.metrics.keys[-2]] = eval.stats[:2]  # update mAP50-95 and mAP50
-            except Exception as e:
-                LOGGER.warning(f"pycocotools unable to run: {e}")
-        return stats

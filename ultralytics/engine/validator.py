@@ -88,6 +88,7 @@ class BaseValidator:
         self.confusion_matrix = None
         self.nc = None
         self.iouv = None
+        self.dor = None
         self.jdict = None
         self.speed = {"preprocess": 0.0, "inference": 0.0, "loss": 0.0, "postprocess": 0.0}
 
@@ -267,6 +268,48 @@ class BaseValidator:
                         matches = matches[np.unique(matches[:, 0], return_index=True)[1]]
                     correct[matches[:, 1].astype(int), i] = True
         return torch.tensor(correct, dtype=torch.bool, device=pred_classes.device)
+    
+    def match_predictions_loc(self, pred_classes, true_classes, dor, use_scipy=False):
+        """
+        Matches predictions to ground truth objects (pred_classes, true_classes) using DoR.
+
+        Args:
+            pred_classes (torch.Tensor): Predicted class indices of shape(N,).
+            true_classes (torch.Tensor): Target class indices of shape(M,).
+            dor (torch.Tensor): An NxM tensor containing the pairwise DoR values for predictions and ground of truth
+            use_scipy (bool): Whether to use scipy for matching (more precise).
+
+        Returns:
+            (torch.Tensor): Correct tensor of shape(N,10) for 10 DoR thresholds.
+        """
+        # Dx10 matrix, where D - detections, 10 - DoR thresholds
+        correct = np.zeros((pred_classes.shape[0], self.dor.shape[0])).astype(bool)
+        # LxD matrix where L - labels (rows), D - detections (columns)
+        correct_class = true_classes[:, None] == pred_classes
+        dor = dor * correct_class  # zero out the wrong classes
+        dor = dor.cpu().numpy()
+        for i, threshold in enumerate(self.dorv.cpu().tolist()):
+            if use_scipy:
+                # WARNING: known issue that reduces mAP in https://github.com/ultralytics/ultralytics/pull/4708
+                import scipy  # scope import to avoid importing for all commands
+
+                cost_matrix = dor * (dor >= threshold)
+                if cost_matrix.any():
+                    labels_idx, detections_idx = scipy.optimize.linear_sum_assignment(cost_matrix, maximize=True)
+                    valid = cost_matrix[labels_idx, detections_idx] > 0
+                    if valid.any():
+                        correct[detections_idx[valid], i] = True
+            else:
+                matches = np.nonzero(dor >= threshold)  # DoR > threshold and classes match
+                matches = np.array(matches).T
+                if matches.shape[0]:
+                    if matches.shape[0] > 1:
+                        matches = matches[dor[matches[:, 0], matches[:, 1]].argsort()[::-1]]
+                        matches = matches[np.unique(matches[:, 1], return_index=True)[1]]
+                        # matches = matches[matches[:, 2].argsort()[::-1]]
+                        matches = matches[np.unique(matches[:, 0], return_index=True)[1]]
+                    correct[matches[:, 1].astype(int), i] = True
+        return torch.tensor(correct, dtype=torch.bool, device=pred_classes.device)
 
     def add_callback(self, event: str, callback):
         """Appends the given callback."""
@@ -345,4 +388,5 @@ class BaseValidator:
 
     def eval_json(self, stats):
         """Evaluate and return JSON format of prediction statistics."""
-        pass
+        raise NotImplementedError("eval_json function not implemented in validator")
+ 
