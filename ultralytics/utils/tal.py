@@ -297,8 +297,6 @@ class LocTaskAlignedAssigner(nn.Module):
             gt_radii (Tensor): sahpe(bs, n_max_locs, 1)
             gt_locations (Tensor): shape(bs, n_max_locs, 2)
             mask_gt (Tensor): shape(bs, n_max_locs, 1)
-            radii (float): dictionary of radii specifying for each class, which localizations are considered false positive. 
-
         Returns:
             target_labels (Tensor): shape(bs, num_total_anchors)
             target_locs (Tensor): shape(bs, num_total_anchors, 2)

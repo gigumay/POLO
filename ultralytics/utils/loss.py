@@ -114,7 +114,10 @@ class HausdorffLoss(nn.Module):
         super().__init__()
 
     def forward(self, pred_locations, target_locations, fg_mask):
-        pairwise_dist = torch.cdist(pred_locations[fg_mask], target_locations[fg_mask])
+        if self.training:
+            pairwise_dist = torch.cdist(pred_locations[fg_mask], target_locations[fg_mask])
+        else:
+            pairwise_dist = torch.cdist(pred_locations[fg_mask].to(target_locations.dtype), target_locations[fg_mask])
         res = torch.mean(torch.min(pairwise_dist, dim=0).values) + torch.mean(torch.min(pairwise_dist, dim=1).values)
         return res
         

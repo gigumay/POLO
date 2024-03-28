@@ -204,14 +204,14 @@ class Annotator:
                     lineType=cv2.LINE_AA,
                 )
 
-    def loc_label(self, loc, loc_radius=5,label="", color=(128, 128, 128), txt_color=(255, 255, 255)):
+    def loc_label(self, loc, label="", loc_radius=5, color=(128, 128, 128), txt_color=(255, 255, 255)):
         """Add one xy loc to image with label."""
         if isinstance(loc, torch.Tensor):
             loc = loc.tolist()
         if self.pil or not is_ascii(label):
-            # define bbox that will contain ellipse (hardcoding a radius of 4 for now)
-            bbox_tl = (loc[0] - loc_radius, loc[0] - loc_radius)
-            bbox_br = (loc[0] + loc_radius, loc[0] + loc_radius)
+            # define bbox that will contain ellipse
+            bbox_tl = (loc[0] - loc_radius, loc[1] - loc_radius)
+            bbox_br = (loc[0] + loc_radius, loc[1] + loc_radius)
             self.draw.ellipse([bbox_tl, bbox_br], width=self.lw, outline=color)  # ellipse
             if label:
                 w, h = self.font.getsize(label)  # text width, height
@@ -863,7 +863,7 @@ def plot_images(
                     locs[:, 0] *= w     # scale to pixels
                     locs[:, 1] *= h
                 elif scale < 1: # absolute coords need scale if image scales
-                    locs[:, :2] *= 2
+                    locs[:, :2] *= scale
                 locs[:, 0] += x
                 locs[:, 1] += y
                 for j, loc in enumerate(locs.astype(np.int64).tolist()):
