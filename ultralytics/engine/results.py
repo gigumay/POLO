@@ -291,14 +291,14 @@ class Results(SimpleClass):
 
         # Plot Localization results
         if pred_locs is not None and show_locs:
-            for d in reversed(pred_locs):
-                c, conf, id = int(d.cls), float(d.conf) if conf else None, None if d.id is None else int(d.id.item())
+            for l in reversed(pred_locs):
+                c, conf, id = int(d.cls), float(d.conf) if conf else None, None if l.id is None else int(l.id.item())
                 name = ("" if id is None else f"id:{id} ") + names[c]
                 label = (f"{name} {conf:.2f}" if conf else name) if labels else None
-                loc = d.xy
+                loc = l.xy
                 annotator.loc_label(loc, label, color=colors(c, True))
 
-CONTINUE HERE
+
         # Plot Classify results
         if pred_probs is not None and show_probs:
             text = ",\n".join(f"{names[j] if names else j} {pred_probs.data[j]:.2f}" for j in pred_probs.top5)
@@ -336,13 +336,15 @@ CONTINUE HERE
         log_string = ""
         probs = self.probs
         boxes = self.boxes
+        locs = self.locations
         if len(self) == 0:
             return log_string if probs is not None else f"{log_string}(no detections), "
         if probs is not None:
             log_string += f"{', '.join(f'{self.names[j]} {probs.data[j]:.2f}' for j in probs.top5)}, "
-        if boxes:
-            for c in boxes.cls.unique():
-                n = (boxes.cls == c).sum()  # detections per class
+        if boxes or locs:
+            detections = boxes if boxes is not None else locs
+            for c in detections.cls.unique():
+                n = (detections.cls == c).sum()  # detections per class
                 log_string += f"{n} {self.names[int(c)]}{'s' * (n > 1)}, "
         return log_string
 
@@ -356,6 +358,7 @@ CONTINUE HERE
         """
         is_obb = self.obb is not None
         boxes = self.obb if is_obb else self.boxes
+        locs = self.locations
         masks = self.masks
         probs = self.probs
         kpts = self.keypoints
@@ -374,6 +377,13 @@ CONTINUE HERE
                 if kpts is not None:
                     kpt = torch.cat((kpts[j].xyn, kpts[j].conf[..., None]), 2) if kpts[j].has_visible else kpts[j].xyn
                     line += (*kpt.reshape(-1).tolist(),)
+                line += (conf,) * save_conf + (() if id is None else (id,))
+                texts.append(("%g " * len(line)).rstrip() % line)
+        elif locs: 
+            # Locate
+            for j, l in enumerate(locs):
+                c, conf, id = int(l.cls), float(l.conf), None if l.id is None else int(l.id.item())
+                line = (c, *(l.xyn.view(-1)))
                 line += (conf,) * save_conf + (() if id is None else (id,))
                 texts.append(("%g " * len(line)).rstrip() % line)
 
@@ -396,6 +406,9 @@ CONTINUE HERE
         if self.obb is not None:
             LOGGER.warning("WARNING ⚠️ OBB task do not support `save_crop`.")
             return
+        if self.locations is not None:
+            LOGGER.warning("WARNING ⚠️ OBB task do not support `save_crop`.")
+            return
         for d in self.boxes:
             save_one_box(
                 d.xyxy,
@@ -414,15 +427,21 @@ CONTINUE HERE
 
         # Create list of detection dictionaries
         results = []
-        data = self.boxes.data.cpu().tolist()
+        boxes = self.boxes is not None
+        prediction = self.boxes if boxes else self.locations
+        data = self.boxes.data.cpu().tolist() if boxes else self.locations.data.cpu().tolist()
         h, w = self.orig_shape if normalize else (1, 1)
         for i, row in enumerate(data):  # xyxy, track_id if tracking, conf, class_id
-            box = {"x1": row[0] / w, "y1": row[1] / h, "x2": row[2] / w, "y2": row[3] / h}
+            if boxes:
+                detection = {"x1": row[0] / w, "y1": row[1] / h, "x2": row[2] / w, "y2": row[3] / h}
+            else:
+                detection = {"x1": row[0] / w, "y1": row[1] / h}
             conf = row[-2]
             class_id = int(row[-1])
             name = self.names[class_id]
-            result = {"name": name, "class": class_id, "confidence": conf, "box": box}
-            if self.boxes.is_track:
+            detection_key = "box" if boxes else "location"
+            result = {"name": name, "class": class_id, "confidence": conf, detection_key: detection}
+            if prediction.is_track:
                 result["track_id"] = int(row[-3])  # track ID
             if self.masks:
                 x, y = self.masks.xy[i][:, 0], self.masks.xy[i][:, 1]  # numpy array

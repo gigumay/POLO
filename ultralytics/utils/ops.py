@@ -1,11 +1,4 @@
 # Ultralytics YOLO 🚀, AGPL-3.0 license
-
-# DEBUG 
-import sys
-sys.path.append("/home/giacomo/projects/P0_YOLOcate")
-
-from P0_tests.playground import *
-
 import contextlib
 import math
 import re
