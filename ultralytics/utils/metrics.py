@@ -303,7 +303,7 @@ def loc_dor_pw(loc1, loc2, radii):
         (torch.Tensor): An NxM tensor containing the pairwise DoR values for every element in loc1 and loc2.
     """
     pairwise_dist = torch.cdist(loc1, loc2)
-    pw_dor = pairwise_dist / radii
+    pw_dor = pairwise_dist / radii.view(loc1.shape[0], -1)
 
     return pw_dor
 
@@ -424,7 +424,7 @@ class ConfusionMatrix:
                 if not any(m1 == i):
                     self.matrix[dc, self.nc] += 1  # predicted background
 
-    def process_batch_loc(self, localizations, gt_locs, gt_cls):
+    def process_batch_loc(self, localizations, gt_locs, gt_cls, radii=None):
         """
         Update confusion matrix for localization task.
 
@@ -433,6 +433,7 @@ class ConfusionMatrix:
                                          Each row should contain (x, y, conf, class).
             gt_locs (Array[M, 2]: Ground truth locations in xy format.
             gt_cls (Array[M]): The class labels.
+            radii (Array[M]): The raidus values for the classes.
         """
         if gt_cls.shape[0] == 0:  # Check if labels is empty
             if localizations is not None:
@@ -450,7 +451,7 @@ class ConfusionMatrix:
         localizations = localizations[localizations[:, 2] > self.conf]
         gt_classes = gt_cls.int()
         localization_classes = localizations[:, 3].int()
-        dor = loc_dor(gt_locs, localizations[:, :2])
+        dor = loc_dor_pw(loc1=gt_locs, loc2=localizations[:, :2], radii=radii)
 
 
         '''

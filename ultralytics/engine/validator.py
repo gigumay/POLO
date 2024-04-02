@@ -282,7 +282,7 @@ class BaseValidator:
             (torch.Tensor): Correct tensor of shape(N,10) for 10 DoR thresholds.
         """
         # Dx10 matrix, where D - detections, 10 - DoR thresholds
-        correct = np.zeros((pred_classes.shape[0], self.dor.shape[0])).astype(bool)
+        correct = np.zeros((pred_classes.shape[0], self.dorv.shape[0])).astype(bool)
         # LxD matrix where L - labels (rows), D - detections (columns)
         correct_class = true_classes[:, None] == pred_classes
         dor = dor * correct_class  # zero out the wrong classes

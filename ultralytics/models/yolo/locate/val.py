@@ -85,10 +85,10 @@ class LocalizationValidator(BaseValidator):
     def postprocess(self, preds):
         """Apply Non-maximum suppression to prediction outputs."""
         return ops.non_max_suppression_loc(
-            preds,
-            self.args.conf,
-            self.args.dor,
-            self.radii,
+            prediction=preds,
+            conf_thres=self.args.conf,
+            dor_thres=self.args.dor,
+            radii=self.radii,
             labels=self.lb,
             multi_label=True,
             agnostic=self.args.single_cls,
@@ -124,7 +124,7 @@ class LocalizationValidator(BaseValidator):
             stat = dict(
                 conf=torch.zeros(0, device=self.device),
                 pred_cls=torch.zeros(0, device=self.device),
-                tp=torch.zeros(npr, self.niou, dtype=torch.bool, device=self.device),
+                tp=torch.zeros(npr, self.ndor, dtype=torch.bool, device=self.device),
             )
             pbatch = self._prepare_batch(si, batch)
             cls, location = pbatch.pop("cls"), pbatch.pop("location")
@@ -135,21 +135,26 @@ class LocalizationValidator(BaseValidator):
                     for k in self.stats.keys():
                         self.stats[k].append(stat[k])
                     if self.args.plots:
-                        self.confusion_matrix.process_batch_loc(detections=None, gt_locs=location, gt_cls=cls)
+                        self.confusion_matrix.process_batch_loc(localizations=None, gt_locs=location, gt_cls=cls)
                 continue
 
             # Predictions
             if self.args.single_cls:
                 pred[:, 3] = 0
             predn = self._prepare_pred(pred, pbatch)
-            stat["conf"] = predn[:, 2]
+            # DEBUG
+            try:
+                stat["conf"] = predn[:, 2]
+            except:
+                print("BP")
             stat["pred_cls"] = predn[:, 3]
 
             # Evaluate
             if nl:
                 stat["tp"] = self._process_batch(predn, location, cls)
                 if self.args.plots:
-                    self.confusion_matrix.process_batch_loc(predn, location, cls)
+                    radii_t = ops.generate_radii_t(radii=self.radii, cls=cls)
+                    self.confusion_matrix.process_batch_loc(localizations=predn, gt_locs=location, gt_cls=cls, radii=radii_t)
             for k in self.stats.keys():
                 self.stats[k].append(stat[k])
 
@@ -194,8 +199,9 @@ class LocalizationValidator(BaseValidator):
                 )
 
     def _process_batch(self, detections, gt_locations, gt_cls):
-        dor = loc_dor_pw(gt_locations, detections[:, :2])
-        return self.match_predictions_loc(detections[:, 3], gt_cls, dor)
+        radii_t = ops.generate_radii_t(radii=self.radii, cls=gt_cls)
+        dor = loc_dor_pw(loc1=gt_locations, loc2=detections[:, :2], radii=radii_t)
+        return self.match_predictions_loc(pred_classes=detections[:, 3], true_classes=gt_cls, dor=dor)
 
     def build_dataset(self, img_path, mode="val", batch=None):
         """
@@ -216,10 +222,10 @@ class LocalizationValidator(BaseValidator):
     def plot_val_samples(self, batch, ni):
         """Plot validation image samples."""
         plot_images(
-            batch["img"],
-            batch["batch_idx"],
-            batch["cls"].squeeze(-1),
-            batch["locations"],
+            images=batch["img"],
+            batch_idx=batch["batch_idx"],
+            cls=batch["cls"].squeeze(-1),
+            locations=batch["locations"],
             paths=batch["im_file"],
             fname=self.save_dir / f"val_batch{ni}_labels.jpg",
             names=self.names,
@@ -228,9 +234,14 @@ class LocalizationValidator(BaseValidator):
 
     def plot_predictions(self, batch, preds, ni):
         """Plots predicted locations on input images and saves the result."""
+        batch_id, cls_id, locs, confs = output_to_target_loc(preds, max_det=self.args.max_det)
+        
         plot_images(
-            batch["img"],
-            *output_to_target_loc(preds, max_det=self.args.max_det),
+            images=batch["img"],
+            batch_idx=batch_id,
+            cls=cls_id, 
+            locations=locs, 
+            confs=confs,
             paths=batch["im_file"],
             fname=self.save_dir / f"val_batch{ni}_pred.jpg",
             names=self.names,

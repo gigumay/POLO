@@ -365,9 +365,7 @@ def loc_nms(preds, scores, radii, dor_thres) -> torch.Tensor:
 
         suppress_ind[suppress_m[i].nonzero()] = True
 
-    keep_ind = (~suppress_ind).nonzero()
-    if keep_ind.numel() > 1:
-        keep_ind.squeeze_(1)
+    keep_ind = (~suppress_ind).nonzero().squeeze(-1)
 
     return order[keep_ind]
 
@@ -467,15 +465,17 @@ def non_max_suppression_loc(
 
         # Batched NMS
         c = x[:, 3:4] * (0 if agnostic else cls_offset)  # classes
-        # as seen on https://stackoverflow.com/questions/73650652/how-to-apply-function-element-wise-to-2d-tensor
-        radii_np = np.vectorize(lambda x: radii[x])(x[:, 3:4].cpu())
-        radii_t = torch.from_numpy(radii_np).to("cuda")
         scores = x[:, 2]  # scores
         locs = x[:, :2] + c  # locations (offset by class)
-        i = loc_nms(locs, scores, radii_t, dor_thres)  # NMS
+        radii_t = generate_radii_t(radii=radii, cls=x[:, 3:4])
+        i = loc_nms(preds=locs, scores=scores, radii=radii_t, dor_thres=dor_thres)  # NMS
         i = i[:max_det]  # limit detections
 
         output[xi] = x[i]
+
+        # DEBUG
+        if len(output[xi].shape) != 2:
+            print("BP")
 
     return output
 
@@ -513,9 +513,12 @@ def clip_locations(locations, shape):
     Returns:
         (torch.Tensor | numpy.ndarray): remaining locations
     """
-    good = (locations[:, 0] < shape[1]) & (locations[:, 1] < shape[0])
-    if not torch.any(good):
-        print("WARNING ⚠️: clipping in 'ops.py' removed all locations!")
+    good = (locations[..., 0] < shape[1]) & \
+           (locations[..., 0] > 0) & \
+           (locations[..., 1] < shape[0]) & \
+           (locations[..., 1] > 0) 
+    #if not torch.any(good):
+        #print("WARNING ⚠️: clipping removed all locations!")
     
     return locations[good]
 
@@ -1041,3 +1044,19 @@ def clean_str(s):
         (str): a string with special characters replaced by an underscore _
     """
     return re.sub(pattern="[|@#!¡·$€%&()=?¿^*;:,¨´><+]", repl="_", string=s)
+
+
+def generate_radii_t(radii, cls):
+    """
+    For a tensor of class labels, generate a tensor of the same dimensions containing each classes radius 
+    value. DON'T USE DURING TRAINING! 
+    As seen on https://stackoverflow.com/questions/73650652/how-to-apply-function-element-wise-to-2d-tensor
+    Args:
+        radii (Dict): Dictionary containing the radius values for each class.
+        cls (Torch.tensor): Tensor containing the class labels
+    Returns:
+        A tensor containing the corresponding radius value for each element in the cls tensor.
+    """
+
+    radii_np = np.vectorize(lambda x: radii[x])(cls.cpu())
+    return torch.from_numpy(radii_np).to(cls.device)

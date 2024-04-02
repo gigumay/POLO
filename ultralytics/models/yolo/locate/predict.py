@@ -29,9 +29,9 @@ class LocalizationPredictor(BasePredictor):
     def postprocess(self, preds, img, orig_imgs):
         """Post-processes predictions and returns a list of Results objects."""
         preds = ops.non_max_suppression_loc(
-            preds,
-            self.args.conf,
-            self.args.dor,
+            prediction=preds,
+            conf_thres=self.args.conf,
+            dor_thres=self.args.dor,
             radii=self.radii,
             agnostic=self.args.agnostic_nms,
             max_det=self.args.max_det,

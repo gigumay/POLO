@@ -1094,7 +1094,7 @@ def output_to_target(output, max_det=300):
     return targets[:, 0], targets[:, 1], targets[:, 2:-1], targets[:, -1]
 
 def output_to_target_loc(output, max_det=300):
-    """Convert model output to target format [batch_id, class_id, x, y, w, h, conf] for plotting."""
+    """Convert model output to target format [batch_id, class_id, x, y, conf] for plotting."""
     targets = []
     for i, o in enumerate(output):
         loc, conf, cls = o[:max_det, :4].cpu().split((2, 1, 1), 1)
