@@ -309,7 +309,7 @@ class v8LocalizationLoss:
         h = model.args  # hyperparameters
         m = model.model[-1]  # Locate() module
         self.bce = nn.BCEWithLogitsLoss(reduction="none")
-        self.loc_loss = HausdorffLoss()
+        self.loc_loss = EuclidLoss()
         self.hyp = h
         self.stride = m.stride  # model strides
         self.nc = m.nc  # number of classes
@@ -388,12 +388,12 @@ class v8LocalizationLoss:
         # localization loss
         if fg_mask.sum():
             target_locations /= stride_tensor
-            loss[0] = self.loc_loss(pred_locations, target_locations, fg_mask)
+            loss[0] = self.loc_loss(pred_locations=pred_locations, target_locations=target_locations, fg_mask=fg_mask)
 
         loss[0] *= self.hyp.loc  # loc gain
         loss[1] *= self.hyp.cls  # cls gain
 
-        return loss.sum() * batch_size, loss.detach()  # loss(box, cls, dfl)
+        return loss.sum() * batch_size, loss.detach()  # loss(loc, cls)
 
 class v8SegmentationLoss(v8DetectionLoss):
     """Criterion class for computing training losses."""

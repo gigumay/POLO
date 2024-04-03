@@ -93,7 +93,7 @@ class LocalizationTrainer(BaseTrainer):
 
     def get_validator(self):
         """Returns a LocalizationValidator for YOLO model validation."""
-        self.loss_names = "cls_loss", "loc_loss"
+        self.loss_names = "loc_loss", "cls_loss"
         return yolo.locate.LocalizationValidator(
             self.test_loader, self.model.radii, save_dir=self.save_dir, args=copy(self.args), _callbacks=self.callbacks
         )

@@ -473,10 +473,6 @@ def non_max_suppression_loc(
 
         output[xi] = x[i]
 
-        # DEBUG
-        if len(output[xi].shape) != 2:
-            print("BP")
-
     return output
 
 def clip_boxes(boxes, shape):
