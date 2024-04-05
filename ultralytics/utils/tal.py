@@ -364,7 +364,9 @@ class LocTaskAlignedAssigner(nn.Module):
         pd_locs = pd_locations.unsqueeze(1).expand(-1, self.n_max_locs, -1, -1)[mask_gt]
         gt_locs = gt_locations.unsqueeze(2).expand(-1, -1, na, -1)[mask_gt]
         gt_rad = gt_radii.unsqueeze(2).expand(-1, -1, na, -1)[mask_gt].squeeze()
-        dist_scores[mask_gt] = 1 / loc_dor(gt_locs, pd_locs, gt_rad)   # inverse since high scores a bad
+        dor = loc_dor(gt_locs, pd_locs, gt_rad)
+
+        dist_scores[mask_gt] = 1 / dor # inverse since high scores are bad
 
         align_metric = loc_scores.pow(self.alpha) * dist_scores.pow(self.beta)
         return align_metric, dist_scores

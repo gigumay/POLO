@@ -102,15 +102,16 @@ class Locate(nn.Module):
         super().__init__()
         self.nc = nc  # number of classes
         self.nl = len(ch)  # number of detection layers
-        self.reg_max = 16  # LocLoss channels (ch[0] // 16 to scale 4/8/12/16/20 for n/s/m/l/x)
-        self.no = nc + self.reg_max * 2  # number of outputs per anchor
+        self.n_output_channels = 16  # LocLoss channels (ch[0] // 16 to scale 4/8/12/16/20 for n/s/m/l/x)
+        self.reg_max_locs = 4
+        self.no = nc + self.n_output_channels * 4  # number of outputs per anchor
         self.stride = torch.zeros(self.nl)  # strides computed during build
-        c2, c3 = max((16, ch[0] // 4, self.reg_max * 2)), max(ch[0], min(self.nc, 100))  # channels
+        c2, c3 = max((16, ch[0] // 4, self.n_output_channels * 4)), max(ch[0], min(self.nc, 100))  # channels
         self.cv2 = nn.ModuleList(
-            nn.Sequential(Conv(x, c2, 3), Conv(c2, c2, 3), nn.Conv2d(c2, 2 * self.reg_max, 1)) for x in ch
+            nn.Sequential(Conv(x, c2, 3), Conv(c2, c2, 3), nn.Conv2d(c2, 4 * self.n_output_channels, 1)) for x in ch
         )
         self.cv3 = nn.ModuleList(nn.Sequential(Conv(x, c3, 3), Conv(c3, c3, 3), nn.Conv2d(c3, self.nc, 1)) for x in ch)
-        self.locInf = LocInf(self.reg_max) if self.reg_max > 1 else nn.Identity()
+        self.locInf = LocInf(self.reg_max_locs) if self.reg_max_locs > 1 else nn.Identity()
 
 
     def forward(self, x):
@@ -122,19 +123,19 @@ class Locate(nn.Module):
 
         # Inference path
         shape = x[0].shape  # BCHW
-        # concatenate the three feature maps -> [bs, 2*reg_max+nc, sum(w*h) across maps (=n_anchors)]
+        # concatenate the three feature maps -> [bs, 4*reg_max+nc, sum(w*h) across maps (=n_anchors)]
         x_cat = torch.cat([xi.view(shape[0], self.no, -1) for xi in x], 2)
         if self.dynamic or self.shape != shape:
             self.anchors, self.strides = (x.transpose(0, 1) for x in make_anchors(x, self.stride, 0.5))
             self.shape = shape
 
         if self.export and self.format in ("saved_model", "pb", "tflite", "edgetpu", "tfjs"):  # avoid TF FlexSplitV ops
-            offsets = x_cat[:, : self.reg_max * 2]
-            cls = x_cat[:, self.reg_max * 2 :]
+            offsets = x_cat[:, : self.n_output_channels * 4]
+            cls = x_cat[:, self.n_output_channels * 4 :]
         else:
             # location.shape = [reg_max*2, n_anchors]
             # cls.shape = [nc, n_anchors]
-            offsets, cls = x_cat.split((self.reg_max * 2, self.nc), 1)
+            offsets, cls = x_cat.split((self.n_output_channels * 4, self.nc), 1)
 
         if self.export and self.format in ("tflite", "edgetpu"):
             # Precompute normalization factor to increase numerical stability

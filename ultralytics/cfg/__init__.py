@@ -31,7 +31,7 @@ from ultralytics.utils import (
 
 # Define valid tasks and modes
 MODES = "train", "val", "predict", "export", "track", "benchmark"
-TASKS = "detect", "segment", "classify", "pose", "obb"
+TASKS = "detect", "locate", "segment", "classify", "pose", "obb"
 TASK2DATA = {
     "detect": "coco8.yaml",
     "locate": "coco8.yaml",

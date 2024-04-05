@@ -142,11 +142,7 @@ class LocalizationValidator(BaseValidator):
             if self.args.single_cls:
                 pred[:, 3] = 0
             predn = self._prepare_pred(pred, pbatch)
-            # DEBUG
-            try:
-                stat["conf"] = predn[:, 2]
-            except:
-                print("BP")
+            stat["conf"] = predn[:, 2]
             stat["pred_cls"] = predn[:, 3]
 
             # Evaluate

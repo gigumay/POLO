@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ultralytics.utils.metrics import OKS_SIGMA
-from ultralytics.utils.ops import crop_mask, xywh2xyxy, xyxy2xywh
+from ultralytics.utils.ops import crop_mask, xywh2xyxy, xyxy2xywh, generate_radii_t
 from ultralytics.utils.tal import RotatedTaskAlignedAssigner, TaskAlignedAssigner, LocTaskAlignedAssigner, dist2bbox, dist2rbox, make_anchors
 from .metrics import bbox_iou, probiou, loc_dor
 from .tal import bbox2dist, offsets2coords
@@ -129,12 +129,10 @@ class DoRLoss(nn.Module):
     def __init__(self):
         super().__init__()
 
-    def forward(self, pred_locations, target_locations, target_scores, target_scores_sum, fg_mask):
+    def forward(self, pred_locations, target_locations, target_scores, target_scores_sum, radii, fg_mask):
         """DoR loss."""
         weight = target_scores.sum(-1)[fg_mask].unsqueeze(-1)
-        dor = loc_dor(pred_locations[fg_mask], target_locations[fg_mask])
-        
-        assert not torch.any(dor > 1)   # should technically be impossible but just to be safe
+        dor = loc_dor(loc1=pred_locations[fg_mask], loc2=target_locations[fg_mask], radii=radii)
         
         # Here I could also use 1 - 1/DoR.
         loss_dor = (dor * weight).sum() / target_scores_sum
@@ -309,7 +307,8 @@ class v8LocalizationLoss:
         h = model.args  # hyperparameters
         m = model.model[-1]  # Locate() module
         self.bce = nn.BCEWithLogitsLoss(reduction="none")
-        self.loc_loss = EuclidLoss()
+        self.loc_loss = DoRLoss()
+        self.radii = model.radii
         self.hyp = h
         self.stride = m.stride  # model strides
         self.nc = m.nc  # number of classes
@@ -350,7 +349,7 @@ class v8LocalizationLoss:
         loss = torch.zeros(2, device=self.device)  # cls, loc
         feats = preds[1] if isinstance(preds, tuple) else preds
         pred_offsets, pred_scores = torch.cat([xi.view(feats[0].shape[0], self.no, -1) for xi in feats], 2).split(
-            (self.reg_max * 2, self.nc), 1
+            (self.reg_max * 4, self.nc), 1
         )
 
         pred_scores = pred_scores.permute(0, 2, 1).contiguous()
@@ -369,7 +368,7 @@ class v8LocalizationLoss:
 
         pred_locations = self.offsets_decode(anchor_points, pred_offsets)
 
-        _, target_locations, target_scores, fg_mask, _ = self.assigner(
+        target_labels, target_locations, target_scores, fg_mask, _ = self.assigner(
             pred_scores.detach().sigmoid(),
             (pred_locations.detach() * stride_tensor).type(gt_locations.dtype),
             anchor_points * stride_tensor,
@@ -387,8 +386,14 @@ class v8LocalizationLoss:
 
         # localization loss
         if fg_mask.sum():
+            radii_t = generate_radii_t(radii=self.radii, cls=target_labels[fg_mask])
             target_locations /= stride_tensor
-            loss[0] = self.loc_loss(pred_locations=pred_locations, target_locations=target_locations, fg_mask=fg_mask)
+            loss[0] = self.loc_loss(pred_locations=pred_locations, 
+                                    target_locations=target_locations, 
+                                    target_scores=target_scores,
+                                    target_scores_sum=target_scores_sum, 
+                                    radii=radii_t,
+                                    fg_mask=fg_mask)
 
         loss[0] *= self.hyp.loc  # loc gain
         loss[1] *= self.hyp.cls  # cls gain
