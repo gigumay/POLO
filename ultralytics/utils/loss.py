@@ -8,7 +8,7 @@ from ultralytics.utils.metrics import OKS_SIGMA
 from ultralytics.utils.ops import crop_mask, xywh2xyxy, xyxy2xywh, generate_radii_t
 from ultralytics.utils.tal import RotatedTaskAlignedAssigner, TaskAlignedAssigner, LocTaskAlignedAssigner, dist2bbox, dist2rbox, make_anchors
 from .metrics import bbox_iou, probiou, loc_dor
-from .tal import bbox2dist, offsets2coords
+from .tal import bbox2dist
 
 
 class VarifocalLoss(nn.Module):
@@ -335,21 +335,13 @@ class v8LocalizationLoss:
                     out[j, :n] = targets[matches, 1:]
             out[..., 2:4] = out[..., 2:4].mul_(scale_tensor)
         return out
-    
-    def offsets_decode(self, anchor_points, pred_offsets):
-        """Decode predicted object bounding box coordinates from anchor points and distribution."""
-        b, a, c = pred_offsets.shape  # batch, anchors, channels
-        pred_offsets = pred_offsets.view(b, a, 2, c // 2).softmax(3)
-        pred_offsets = (pred_offsets * 2) - 1
-        pred_offsets = pred_offsets.matmul(self.proj.type(pred_offsets.dtype))
-        return offsets2coords(pred_offsets, anchor_points)
 
     def __call__(self, preds, batch):
         """Calculate the sum of the loss for cls and loc multiplied by batch size."""
         loss = torch.zeros(2, device=self.device)  # cls, loc
         feats = preds[1] if isinstance(preds, tuple) else preds
         pred_offsets, pred_scores = torch.cat([xi.view(feats[0].shape[0], self.no, -1) for xi in feats], 2).split(
-            (self.reg_max * 4, self.nc), 1
+            (self.reg_max * 2, self.nc), 1
         )
 
         pred_scores = pred_scores.permute(0, 2, 1).contiguous()
@@ -363,10 +355,25 @@ class v8LocalizationLoss:
         # Targets
         targets = torch.cat((batch["batch_idx"].view(-1, 1), batch["cls"].view(-1, 1), batch["radii"].view(-1, 1), batch["locations"]), 1)
         targets = self.preprocess(targets.to(self.device), batch_size, scale_tensor=imgsz[[1, 0]])  # de-normalizes targets
-        gt_labels, gt_radii, gt_locations = targets.split((1,1, 2), 2)  # cls, xy
+        gt_labels, gt_radii, gt_locations = targets.split((1, 1, 2), 2) 
         mask_gt = gt_locations.sum(2, keepdim=True).gt_(0)
 
-        pred_locations = self.offsets_decode(anchor_points, pred_offsets)
+        """
+        This is an adaptation of the YOLOv5 center point regression formula. In the original version 
+        (https://github.com/ultralytics/yolov5/issues/12888#issuecomment-2045609546) the sigmoid output is multiplied by
+        two and only 0.5 is subtracted before adding the reference point. However, in YOLOv5 the reference point is the top
+        left corner of a grid cell; here it's the center. So i subtract an additional 0.5 from the anchor points
+        to account for this difference. 
+        
+        I was also wondering if I should limit the predicted locations to 0, since now negative pixel coordinates are possible
+        """
+        if self.reg_max > 1: 
+            # multiple predictions per cell
+            pred_locations = (anchor_points.repeat(1, self.reg_max).unsqueeze(0) - 0.5) + ((pred_offsets.sigmoid() * 2) - 0.5)
+        else:
+            pred_locations = (anchor_points - 0.5) + (pred_offsets.sigmoid() * 2 - 0.5)
+
+
 
         target_labels, target_locations, target_scores, fg_mask, _ = self.assigner(
             pred_scores.detach().sigmoid(),

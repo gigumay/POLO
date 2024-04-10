@@ -468,6 +468,8 @@ class LocTaskAlignedAssigner(nn.Module):
         Returns:
             (Tensor): shape(b, n_locations, h*w)
         """
+
+        CONTINUE HERE, DISCARD ANCHOR IF NO PREDICTION LIES WITHIN A RADIUS 
         n_anchors = xy_candidates.shape[0]
         bs, n_gt_locs, _ = gt_locations.shape
         gt_locs_reordered = gt_locations.view(-1, 1, 2) # ((bs*n_gt), 1, 2)
@@ -591,8 +593,3 @@ def dist2rbox(pred_dist, pred_angle, anchor_points, dim=-1):
     x, y = xf * cos - yf * sin, xf * sin + yf * cos
     xy = torch.cat([x, y], dim=dim) + anchor_points
     return torch.cat([xy, lt + rb], dim=dim)
-
-def offsets2coords(offsets, anchor_points):
-    """Transform distance to coordinates."""
-    loc_coords = anchor_points + offsets
-    return loc_coords

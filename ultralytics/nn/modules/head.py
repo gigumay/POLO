@@ -7,8 +7,8 @@ import torch
 import torch.nn as nn
 from torch.nn.init import constant_, xavier_uniform_
 
-from ultralytics.utils.tal import TORCH_1_10, dist2bbox, dist2rbox, offsets2coords, make_anchors
-from .block import DFL, LocInf, Proto, ContrastiveHead, BNContrastiveHead
+from ultralytics.utils.tal import TORCH_1_10, dist2bbox, dist2rbox, make_anchors
+from .block import DFL, Proto, ContrastiveHead, BNContrastiveHead
 from .conv import Conv
 from .transformer import MLP, DeformableTransformerDecoder, DeformableTransformerDecoderLayer
 from .utils import bias_init_with_prob, linear_init
@@ -102,17 +102,14 @@ class Locate(nn.Module):
         super().__init__()
         self.nc = nc  # number of classes
         self.nl = len(ch)  # number of detection layers
-        self.n_output_channels = 16  # LocLoss channels (ch[0] // 16 to scale 4/8/12/16/20 for n/s/m/l/x)
-        self.reg_max_locs = 4
-        self.no = nc + self.n_output_channels * 4  # number of outputs per anchor
+        self.reg_max = 3  
+        self.no = nc + self.reg_max * 2  # number of outputs per anchor
         self.stride = torch.zeros(self.nl)  # strides computed during build
-        c2, c3 = max((16, ch[0] // 4, self.n_output_channels * 4)), max(ch[0], min(self.nc, 100))  # channels
+        c2, c3 = max((3, ch[0] // 2, self.reg_max * 2)), max(ch[0], min(self.nc, 100))  # channels
         self.cv2 = nn.ModuleList(
-            nn.Sequential(Conv(x, c2, 3), Conv(c2, c2, 3), nn.Conv2d(c2, 4 * self.n_output_channels, 1)) for x in ch
+            nn.Sequential(Conv(x, c2, 3), Conv(c2, c2, 3), nn.Conv2d(c2, 2 * self.reg_max, 1)) for x in ch
         )
         self.cv3 = nn.ModuleList(nn.Sequential(Conv(x, c3, 3), Conv(c3, c3, 3), nn.Conv2d(c3, self.nc, 1)) for x in ch)
-        self.locInf = LocInf(self.reg_max_locs) if self.reg_max_locs > 1 else nn.Identity()
-
 
     def forward(self, x):
         """Concatenates and returns predicted coordinates and class probabilities."""
