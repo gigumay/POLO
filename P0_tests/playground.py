@@ -3,6 +3,28 @@ from ultralytics.utils.metrics import loc_dor, loc_dor_pw, bbox_iou
 from torchvision.ops.boxes import box_iou
 from torchvision.ops import nms
 
+
+def split_pred_euclid(gt_locs: torch.Tensor, predictions: torch.Tensor) -> torch.Tensor:
+    n_anchors = predictions.shape[0]
+    bs, n_gt, _ = gt_locs.shape
+    gt_locs_reordered = gt_locs.view(-1, 1, 2)
+    tensor_list = []
+
+    fac = predictions.shape[1] // 2
+
+    for i in range(fac):
+        # after **2: (b_s*gt, n_anchors, 2)
+        # after sum: (b_s*gt, n_anchors)
+        euclid_dist = torch.sqrt(((predictions[None][:,:, i*2:(i+1)*2] - gt_locs_reordered) ** 2).sum(dim=2))
+        tensor_list.append(euclid_dist)
+
+    
+    distances = torch.stack(tensor_list, dim=2)
+
+    return distances.view(bs, n_gt, n_anchors, fac)
+
+
+
 def nms_tut(bboxes: torch.Tensor, scores: torch.Tensor, iou_threshold: float) -> torch.Tensor:
     order = torch.argsort(-scores).to("cuda")
     indices = torch.arange(bboxes.shape[0], device="cuda")
@@ -140,20 +162,44 @@ def cdist_ribera(x, y):
 
 
 if __name__ == "__main__":
-    
-    bxs = torch.randint(10,(2,4))
-    scores = torch.randint(10, (2,1)).squeeze()
-    iou_thres = 0.7
-    
+    #### TEST WITH ONLY ONE POINT PER ANCHOR 
+    preds = torch.tensor([[1.0, 1.0, 2.0, 2.0, 3.0, 3.0],
+                          [4.0, 4.0, 5.0, 5.0, 6.0, 6.0],
+                          [100.0, 100.0, 100.0, 100.0, 100.0, 100.0]])
+    fac = preds.shape[1] // 2
 
-    nms_gpt_vec(bxs, scores, iou_thres)
-    nms_gpt(bxs, scores, iou_thres)
+    gt_locs = torch.tensor([[[1.0, 1.0],
+                             [2.0, 2.0]],
+                            [[3.0, 3.0],
+                             [4.0, 4.0]]])
+    
+    gt_radii = torch.Tensor([[[2.0], 
+                              [1.0]], 
+                             [[1.0], 
+                              [2.0]]])
+    
+    dist_it = split_pred_euclid(gt_locs=gt_locs, predictions=preds)
 
+    test = gt_radii.unsqueeze(3).expand(dist_it.shape[0], dist_it.shape[1], dist_it.shape[2], fac)
+
+    test_mask = dist_it.le(test) # (bs, n_gts, n_anchors, n_preds_per_anchor)
+
+    final = torch.any(test_mask, dim=3)
 
     print("BP")
 
 
     """
+    ####################################### NMS #################################################################
+    #############################################################################################################
+    bxs = torch.randint(10,(2,4))
+    scores = torch.randint(10, (2,1)).squeeze()
+    iou_thres = 0.7
+
+
+    nms_gpt_vec(bxs, scores, iou_thres)
+    nms_gpt(bxs, scores, iou_thres)
+
     ####################################### DOR #################################################################
     #############################################################################################################
     n_loc1 = 2

@@ -337,7 +337,7 @@ class LocTaskAlignedAssigner(nn.Module):
 
     def get_pos_mask(self, pd_scores, pd_locations, gt_labels, gt_radii, gt_locations, anc_points, mask_gt):
         """Get in_gts mask, (b, max_num_obj, h*w)."""
-        mask_in_radius = self.select_candidates_in_radius(anc_points, gt_locations, gt_radii)
+        mask_in_radius = self.select_candidates_in_radius(pd_locations, gt_locations, gt_radii)
         # Get anchor_align metric, (b, max_num_obj, h*w)
         align_metric, dist_scores = self.get_loc_metrics(pd_scores, pd_locations, gt_labels, gt_radii, gt_locations, 
                                                          mask_in_radius * mask_gt)
@@ -459,7 +459,7 @@ class LocTaskAlignedAssigner(nn.Module):
     @staticmethod
     def select_candidates_in_radius(xy_candidates, gt_locations, gt_radii):
         """
-        Select the positive anchor center in within the radius of a gt.
+        Select the anchors where at least one of the predictions lies within the radius of a gt.
 
         Args:
             xy_candidates (Tensor): shape(h*w, 2)
@@ -469,15 +469,27 @@ class LocTaskAlignedAssigner(nn.Module):
             (Tensor): shape(b, n_locations, h*w)
         """
 
-        CONTINUE HERE, DISCARD ANCHOR IF NO PREDICTION LIES WITHIN A RADIUS 
-        n_anchors = xy_candidates.shape[0]
-        bs, n_gt_locs, _ = gt_locations.shape
-        gt_locs_reordered = gt_locations.view(-1, 1, 2) # ((bs*n_gt), 1, 2)
-        euclid_distances = torch.sqrt(((xy_candidates[None] - gt_locs_reordered) ** 2).sum(dim=2)) # ((bs*n_gt), n_anchors)
-        euclid_dist_reordered = euclid_distances.view(bs, n_gt_locs, n_anchors)
+        bs, n_gt, _ = gt_locations.shape
+        gt_locs_reordered = gt_locations.view(-1, 1, 2)
+        tensor_list = []
 
-        return euclid_dist_reordered.le_(gt_radii) 
-    
+        preds_per_anchor = xy_candidates.shape[1] // 2
+
+        """
+        I couldnt think of a way to do this without the loop but it's probably easy. I use the loop to
+        calculate the distance to all the predicted points of all anchors for every point.        
+        """
+        for i in range(preds_per_anchor):
+            euclid_dist = torch.sqrt(((xy_candidates[None][:,:, i*2:(i+1)*2] - gt_locs_reordered) ** 2).sum(dim=2))
+            tensor_list.append(euclid_dist)
+
+        distances = torch.stack(tensor_list, dim=2).view(bs, n_gt, preds_per_anchor)
+
+        # expand raddi to filter the distances tensor
+        radii_exp = gt_radii.unsqueeze(3).expand(distances.shape[0], distances.shape[1], distances.shape[2], preds_per_anchor)
+
+        # return a maks that for each gt masks out anchors for which no predictions lie within the radius of the gt
+        return torch.any(distances.le(radii_exp), dim=3)
 
     @staticmethod
     def select_closest_locs(mask_pos, dist_scores, n_max_locs):

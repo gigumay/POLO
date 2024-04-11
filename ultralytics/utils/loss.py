@@ -365,14 +365,10 @@ class v8LocalizationLoss:
         left corner of a grid cell; here it's the center. So i subtract an additional 0.5 from the anchor points
         to account for this difference. 
         
-        I was also wondering if I should limit the predicted locations to 0, since now negative pixel coordinates are possible
+        I was also wondering if I should limit the predicted locations to 0, since now negative pixel coordinates are possible.
+        Finally, we now have multiple predictiuons per cell, so the anchors tensor needs to be expanded.
         """
-        if self.reg_max > 1: 
-            # multiple predictions per cell
-            pred_locations = (anchor_points.repeat(1, self.reg_max).unsqueeze(0) - 0.5) + ((pred_offsets.sigmoid() * 2) - 0.5)
-        else:
-            pred_locations = (anchor_points - 0.5) + (pred_offsets.sigmoid() * 2 - 0.5)
-
+        pred_locations = (anchor_points.repeat(1, self.reg_max) - 0.5) + ((pred_offsets.sigmoid() * 2) - 0.5)
 
 
         target_labels, target_locations, target_scores, fg_mask, _ = self.assigner(
