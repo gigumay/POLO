@@ -307,7 +307,7 @@ class v8LocalizationLoss:
         h = model.args  # hyperparameters
         m = model.model[-1]  # Locate() module
         self.bce = nn.BCEWithLogitsLoss(reduction="none")
-        self.loc_loss = DoRLoss()
+        self.loc_loss = EuclidLoss()
         self.radii = model.radii
         self.hyp = h
         self.stride = m.stride  # model strides
@@ -350,7 +350,7 @@ class v8LocalizationLoss:
         dtype = pred_scores.dtype
         batch_size = pred_scores.shape[0]
         imgsz = torch.tensor(feats[0].shape[2:], device=self.device, dtype=dtype) * self.stride[0]  # image size (h,w)
-        anchor_points, stride_tensor = make_anchors(feats, self.stride, 0.5)
+        anchor_points, stride_tensor = make_anchors(feats=feats, strides=self.stride, grid_cell_offset=0)
 
         # Targets
         targets = torch.cat((batch["batch_idx"].view(-1, 1), batch["cls"].view(-1, 1), batch["radii"].view(-1, 1), batch["locations"]), 1)
@@ -359,26 +359,24 @@ class v8LocalizationLoss:
         mask_gt = gt_locations.sum(2, keepdim=True).gt_(0)
 
         """
-        This is an adaptation of the YOLOv5 center point regression formula. In the original version 
-        (https://github.com/ultralytics/yolov5/issues/12888#issuecomment-2045609546) the sigmoid output is multiplied by
-        two and only 0.5 is subtracted before adding the reference point. However, in YOLOv5 the reference point is the top
-        left corner of a grid cell; here it's the center. So i subtract an additional 0.5 from the anchor points
-        to account for this difference. 
-        
-        I was also wondering if I should limit the predicted locations to 0, since now negative pixel coordinates are possible.
-        Finally, we now have multiple predictiuons per cell, so the anchors tensor needs to be expanded.
+        This is an adaptation of the YOLOv5 center point regression formula
+        (https://github.com/ultralytics/yolov5/issues/12888#issuecomment-2045609546). 
         """
-        pred_locations = (anchor_points.repeat(1, self.reg_max) - 0.5) + ((pred_offsets.sigmoid() * 2) - 0.5)
+        pred_locations = anchor_points.repeat(1, self.reg_max) + (pred_offsets.sigmoid() * 2 - 0.5)
+        anchors_min = anchor_points - 0.5
+        anchors_max = anchor_points + 1.5 
 
 
         target_labels, target_locations, target_scores, fg_mask, _ = self.assigner(
-            pred_scores.detach().sigmoid(),
-            (pred_locations.detach() * stride_tensor).type(gt_locations.dtype),
-            anchor_points * stride_tensor,
-            gt_labels,
-            gt_radii,
-            gt_locations,
-            mask_gt 
+            pd_scores=pred_scores.detach().sigmoid(),
+            pd_locations=(pred_locations.detach() * stride_tensor).type(gt_locations.dtype),
+            anc_points=anchor_points * stride_tensor,
+            anc_min=anchors_min * stride_tensor,
+            anc_max=anchors_max * stride_tensor, 
+            gt_labels=gt_labels,
+            gt_radii=gt_radii,
+            gt_locations=gt_locations,
+            mask_gt=mask_gt 
         )
 
         target_scores_sum = max(target_scores.sum(), 1)
@@ -389,13 +387,10 @@ class v8LocalizationLoss:
 
         # localization loss
         if fg_mask.sum():
-            radii_t = generate_radii_t(radii=self.radii, cls=target_labels[fg_mask])
+            #radii_t = generate_radii_t(radii=self.radii, cls=target_labels[fg_mask])
             target_locations /= stride_tensor
             loss[0] = self.loc_loss(pred_locations=pred_locations, 
-                                    target_locations=target_locations, 
-                                    target_scores=target_scores,
-                                    target_scores_sum=target_scores_sum, 
-                                    radii=radii_t,
+                                    target_locations=target_locations,
                                     fg_mask=fg_mask)
 
         loss[0] *= self.hyp.loc  # loc gain

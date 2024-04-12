@@ -284,7 +284,7 @@ class LocTaskAlignedAssigner(nn.Module):
         self.eps = eps
 
     @torch.no_grad()
-    def forward(self, pd_scores, pd_locations, anc_points, gt_labels, gt_radii, gt_locations, mask_gt):
+    def forward(self, pd_scores, pd_locations, anc_points, anc_min, anc_max, gt_labels, gt_radii, gt_locations, mask_gt):
         """
         Compute the task-aligned assignment. Reference code is available at
         https://github.com/Nioolek/PPYOLOE_pytorch/blob/master/ppyoloe/assigner/tal_assigner.py.
@@ -293,6 +293,8 @@ class LocTaskAlignedAssigner(nn.Module):
             pd_scores (Tensor): shape(bs, num_total_anchors, num_classes)
             pd_locations (Tensor): shape(bs, num_total_anchors, 2)
             anc_points (Tensor): shape(num_total_anchors, 2)
+            anc_min (Tensor): shape(num_total_anchors, 2)
+            anc_max (Tensor): shape(num_total_anchors, 2)
             gt_labels (Tensor): shape(bs, n_max_locs, 1)
             gt_radii (Tensor): sahpe(bs, n_max_locs, 1)
             gt_locations (Tensor): shape(bs, n_max_locs, 2)
@@ -318,7 +320,8 @@ class LocTaskAlignedAssigner(nn.Module):
             )
 
         mask_pos, align_metric, dist_scores = self.get_pos_mask(
-            pd_scores, pd_locations, gt_labels, gt_radii, gt_locations, anc_points, mask_gt
+            pd_scores=pd_scores, pd_locations=pd_locations, gt_labels=gt_labels, gt_radii=gt_radii,gt_locations=gt_locations, 
+            anc_points=anc_points, anc_min=anc_min, anc_max=anc_max, mask_gt=mask_gt
         )
 
         target_gt_idx, fg_mask, mask_pos = self.select_closest_locs(mask_pos, dist_scores, self.n_max_locs)
@@ -335,21 +338,22 @@ class LocTaskAlignedAssigner(nn.Module):
 
         return target_labels, target_locations, target_scores, fg_mask.bool(), target_gt_idx
 
-    def get_pos_mask(self, pd_scores, pd_locations, gt_labels, gt_radii, gt_locations, anc_points, mask_gt):
-        """Get in_gts mask, (b, max_num_obj, h*w)."""
-        mask_in_radius = self.select_candidates_in_radius(pd_locations, gt_locations, gt_radii)
+    def get_pos_mask(self, pd_scores, pd_locations, gt_labels, gt_radii, gt_locations, anc_points, anc_min, anc_max, mask_gt):
+        """Mas out cells that do not contian/cant reach any gts (b, max_num_obj, h*w)."""
+        candidates_mask = self.select_candidates_that_contain_gts(anc_min=anc_min, anc_max=anc_max, gt_locations=gt_locations)
         # Get anchor_align metric, (b, max_num_obj, h*w)
-        align_metric, dist_scores = self.get_loc_metrics(pd_scores, pd_locations, gt_labels, gt_radii, gt_locations, 
-                                                         mask_in_radius * mask_gt)
+        align_metric, dist_scores = self.get_loc_metrics(pd_scores=pd_scores, pd_locations=pd_locations, gt_labels=gt_labels,
+                                                         gt_radii=gt_radii, gt_locations=gt_locations, mask_gt=candidates_mask * mask_gt)
         # Get topk_metric mask, (b, max_num_obj, h*w)
         mask_topk = self.select_topk_candidates(align_metric, topk_mask=mask_gt.expand(-1, -1, self.topk).bool())
         # Merge all mask to a final mask, (b, max_num_obj, h*w)
-        mask_pos = mask_topk * mask_in_radius * mask_gt
+        mask_pos = mask_topk * candidates_mask * mask_gt
 
         return mask_pos, align_metric, dist_scores
 
     def get_loc_metrics(self, pd_scores, pd_locations, gt_labels, gt_radii, gt_locations, mask_gt):
-        """Compute alignment metric given predicted and ground truth locations."""
+        """Compute alignment metric given predicted and ground truth locations. Currently this cannot handle
+        more than one prediction per cell."""
         na = pd_locations.shape[-2]
         mask_gt = mask_gt.bool()  # b, max_num_obj, h*w
         dist_scores = torch.zeros([self.bs, self.n_max_locs, na], dtype=pd_locations.dtype, device=pd_locations.device)
@@ -457,39 +461,25 @@ class LocTaskAlignedAssigner(nn.Module):
         return target_labels, target_locations, target_scores
 
     @staticmethod
-    def select_candidates_in_radius(xy_candidates, gt_locations, gt_radii):
+    def select_candidates_that_contain_gts(anc_min, anc_max, gt_locations, eps=1e-9):
         """
-        Select the anchors where at least one of the predictions lies within the radius of a gt.
+        Select the anchors that contain a gt.
 
         Args:
-            xy_candidates (Tensor): shape(h*w, 2)
+            anc_min (Tensor): shape(h*w, 2)
+            anc_max (Tensor): shape(h*w, 2)
             gt_locations (Tensor): shape(b, n_locations, 2)
-            gt_radii (Tensor): shape(b, n_locations, 1)
         Returns:
             (Tensor): shape(b, n_locations, h*w)
         """
 
-        bs, n_gt, _ = gt_locations.shape
-        gt_locs_reordered = gt_locations.view(-1, 1, 2)
-        tensor_list = []
+        n_anchors = anc_min.shape[0]
+        bs, n_locs, _ = gt_locations.shape
+        gt_reordered = gt_locations.view(-1, 1, 2)
+        loc_deltas = torch.cat((gt_reordered - anc_min[None], anc_max[None] - gt_reordered), dim=2).view(bs, n_locs, n_anchors, -1)
+        # return (bbox_deltas.min(3)[0] > eps).to(gt_bboxes.dtype)
+        return loc_deltas.amin(3).gt_(eps)
 
-        preds_per_anchor = xy_candidates.shape[1] // 2
-
-        """
-        I couldnt think of a way to do this without the loop but it's probably easy. I use the loop to
-        calculate the distance to all the predicted points of all anchors for every point.        
-        """
-        for i in range(preds_per_anchor):
-            euclid_dist = torch.sqrt(((xy_candidates[None][:,:, i*2:(i+1)*2] - gt_locs_reordered) ** 2).sum(dim=2))
-            tensor_list.append(euclid_dist)
-
-        distances = torch.stack(tensor_list, dim=2).view(bs, n_gt, preds_per_anchor)
-
-        # expand raddi to filter the distances tensor
-        radii_exp = gt_radii.unsqueeze(3).expand(distances.shape[0], distances.shape[1], distances.shape[2], preds_per_anchor)
-
-        # return a maks that for each gt masks out anchors for which no predictions lie within the radius of the gt
-        return torch.any(distances.le(radii_exp), dim=3)
 
     @staticmethod
     def select_closest_locs(mask_pos, dist_scores, n_max_locs):
@@ -507,7 +497,7 @@ class LocTaskAlignedAssigner(nn.Module):
         """
         # (b, n_max_boxes, h*w) -> (b, h*w)
         fg_mask = mask_pos.sum(-2)
-        if fg_mask.max() > 1:  # one anchor is assigned to multiple gt_bboxes
+        if fg_mask.max() > 1:  # one anchor is assigned to multiple gt locations
             mask_multi_gts = (fg_mask.unsqueeze(1) > 1).expand(-1, n_max_locs, -1)  # (b, n_max_locs, h*w)
             max_overlaps_idx = dist_scores.argmax(1)  # (b, h*w)
 

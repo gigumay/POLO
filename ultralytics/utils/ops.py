@@ -154,7 +154,7 @@ def scale_locations(img1_shape, locations, img0_shape, ratio_pad=None, padding=T
         locations[..., 1] -= pad[1]  # y padding
 
     locations[..., :2] /= gain
-    return clip_locations(locations, img0_shape)
+    return clip_locations(locations, img0_shape, remove_clipped=True)
 
 
 def make_divisible(x, divisor):
@@ -497,7 +497,7 @@ def clip_boxes(boxes, shape):
     return boxes
 
 
-def clip_locations(locations, shape):
+def clip_locations(locations, shape, remove_clipped):
     """
     Takes a list of locations and a shape (height, width) and removes the locations that lie outside 
     of the shape.
@@ -505,18 +505,23 @@ def clip_locations(locations, shape):
     Args:
         locations (torch.Tensor): the locations to clip
         shape (tuple): the shape of the image
+        remove_clipped (boolean): if True, locations that lie outside of the shape are removed, not clipped
 
     Returns:
         (torch.Tensor | numpy.ndarray): remaining locations
     """
-    good = (locations[..., 0] < shape[1]) & \
-           (locations[..., 0] > 0) & \
-           (locations[..., 1] < shape[0]) & \
-           (locations[..., 1] > 0) 
-    #if not torch.any(good):
-        #print("WARNING ⚠️: clipping removed all locations!")
-    
-    return locations[good]
+    if remove_clipped:
+        good = (locations[..., 0] < shape[1]) & \
+            (locations[..., 0] > 0) & \
+            (locations[..., 1] < shape[0]) & \
+            (locations[..., 1] > 0) 
+        #if not torch.any(good):
+            #print("WARNING ⚠️: clipping removed all locations!")
+        return locations[good]
+    else:
+        locations[..., 0] = locations[..., 0].clamp(0, shape[1])  # x
+        locations[..., 1] = locations[..., 1].clamp(0, shape[0])  # y
+        return locations
 
 def clip_coords(coords, shape):
     """

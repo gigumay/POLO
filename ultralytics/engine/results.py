@@ -140,7 +140,7 @@ class Results(SimpleClass):
         if boxes is not None:
             self.boxes = Boxes(ops.clip_boxes(boxes, self.orig_shape), self.orig_shape)
         if locations is not None:
-            self.locations = Locations(ops.clip_locations(locations, self.orig_shape), self.orig_shape)
+            self.locations = Locations(ops.clip_locations(locations, self.orig_shape, remove_clipped=True), self.orig_shape)
         if masks is not None:
             self.masks = Masks(masks, self.orig_shape)
         if probs is not None:

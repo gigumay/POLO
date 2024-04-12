@@ -8,6 +8,7 @@ import torch.nn as nn
 from torch.nn.init import constant_, xavier_uniform_
 
 from ultralytics.utils.tal import TORCH_1_10, dist2bbox, dist2rbox, make_anchors
+from ultralytics.utils.ops import clip_locations
 from .block import DFL, Proto, ContrastiveHead, BNContrastiveHead
 from .conv import Conv
 from .transformer import MLP, DeformableTransformerDecoder, DeformableTransformerDecoderLayer
@@ -102,7 +103,7 @@ class Locate(nn.Module):
         super().__init__()
         self.nc = nc  # number of classes
         self.nl = len(ch)  # number of detection layers
-        self.reg_max = 3  
+        self.reg_max = 1  
         self.no = nc + self.reg_max * 2  # number of outputs per anchor
         self.stride = torch.zeros(self.nl)  # strides computed during build
         c2, c3 = max((3, ch[0] // 2, self.reg_max * 2)), max(ch[0], min(self.nc, 100))  # channels
@@ -120,31 +121,32 @@ class Locate(nn.Module):
 
         # Inference path
         shape = x[0].shape  # BCHW
-        # concatenate the three feature maps -> [bs, 4*reg_max+nc, sum(w*h) across maps (=n_anchors)]
+        # concatenate the three feature maps -> (bs, 2 + n_classes, n_anchors)
         x_cat = torch.cat([xi.view(shape[0], self.no, -1) for xi in x], 2)
         if self.dynamic or self.shape != shape:
-            self.anchors, self.strides = (x.transpose(0, 1) for x in make_anchors(x, self.stride, 0.5))
+            self.anchors, self.strides = (x.transpose(0, 1) for x in make_anchors(x, self.stride, 0))
             self.shape = shape
 
         if self.export and self.format in ("saved_model", "pb", "tflite", "edgetpu", "tfjs"):  # avoid TF FlexSplitV ops
+            raise NotImplementedError("This path has not been adjusted/tested for YOLOcate!")
             offsets = x_cat[:, : self.n_output_channels * 4]
             cls = x_cat[:, self.n_output_channels * 4 :]
         else:
-            # location.shape = [reg_max*2, n_anchors]
-            # cls.shape = [nc, n_anchors]
-            offsets, cls = x_cat.split((self.n_output_channels * 4, self.nc), 1)
+            # location.shape = [bs, reg_max*2, n_anchors]
+            # cls.shape = [bs, nc, n_anchors]
+            offsets, cls = x_cat.split((self.reg_max * 2, self.nc), 1)
 
         if self.export and self.format in ("tflite", "edgetpu"):
             # Precompute normalization factor to increase numerical stability
             # See https://github.com/ultralytics/ultralytics/issues/7371
+            raise NotImplementedError("This path has not been adjusted/tested for YOLOcate!")
             grid_h = shape[2]
             grid_w = shape[3]
             grid_size = torch.tensor([grid_w, grid_h, grid_w, grid_h], device=offsets.device).reshape(1, 4, 1)
             norm = self.strides / (self.stride[0] * grid_size)
             loc = self.decode_offsets(self.locInf(offsets) * norm, self.anchors.unsqueeze(0) * norm[:, :2])
         else:
-            # loc -> [2, n_anchors]
-            loc = self.decode_offsets(self.locInf(offsets), self.anchors.unsqueeze(0)) * self.strides 
+            loc = ((offsets.sigmoid() * 2 - 0.5) + self.anchors) * self.strides
 
         y = torch.cat((loc, cls.sigmoid()), 1)
         return y if self.export else (y, x)
@@ -157,11 +159,6 @@ class Locate(nn.Module):
         for a, b, s in zip(m.cv2, m.cv3, m.stride):  # from
             a[-1].bias.data[:] = 1.0  # pt
             b[-1].bias.data[: m.nc] = math.log(5 / m.nc / (640 / s) ** 2)  # cls (.01 objects, 80 classes, 640 img)
-
-    def decode_offsets(self, offsets, anchors):
-        """Decode offsets to get locations"""
-        return offsets2coords(offsets, anchors)
-
     
 
 

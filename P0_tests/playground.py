@@ -165,7 +165,7 @@ if __name__ == "__main__":
     #### TEST WITH ONLY ONE POINT PER ANCHOR 
     preds = torch.tensor([[1.0, 1.0, 2.0, 2.0, 3.0, 3.0],
                           [4.0, 4.0, 5.0, 5.0, 6.0, 6.0],
-                          [100.0, 100.0, 100.0, 100.0, 100.0, 100.0]])
+                          [100.0, 100.0, 100.0, 100.0, 100.0, .0]])
     fac = preds.shape[1] // 2
 
     gt_locs = torch.tensor([[[1.0, 1.0],
