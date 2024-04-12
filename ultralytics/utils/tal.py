@@ -369,10 +369,11 @@ class LocTaskAlignedAssigner(nn.Module):
         gt_locs = gt_locations.unsqueeze(2).expand(-1, -1, na, -1)[mask_gt]
         gt_rad = gt_radii.unsqueeze(2).expand(-1, -1, na, -1)[mask_gt].squeeze()
         dor = loc_dor(gt_locs, pd_locs, gt_rad)
-
-        dist_scores[mask_gt] = 1 / dor # inverse since high scores are bad
+        
+        dist_scores[mask_gt] = 1 / (1 + dor) 
 
         align_metric = loc_scores.pow(self.alpha) * dist_scores.pow(self.beta)
+
         return align_metric, dist_scores
 
     def select_topk_candidates(self, metrics, largest=True, topk_mask=None):

@@ -1,6 +1,7 @@
 # Ultralytics YOLO 🚀, AGPL-3.0 license
 
 import torch
+import math
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -384,6 +385,9 @@ class v8LocalizationLoss:
         # Cls loss
         # loss[1] = self.varifocal_loss(pred_scores, target_scores, target_labels) / target_scores_sum  # VFL way
         loss[1] = self.bce(pred_scores, target_scores.to(dtype)).sum() / target_scores_sum  # BCE
+
+        if math.isnan(loss[1]):
+            print("BP")
 
         # localization loss
         if fg_mask.sum():
