@@ -342,8 +342,7 @@ class v8LocalizationLoss:
         loss = torch.zeros(2, device=self.device)  # cls, loc
         feats = preds[1] if isinstance(preds, tuple) else preds
         pred_offsets, pred_scores = torch.cat([xi.view(feats[0].shape[0], self.no, -1) for xi in feats], 2).split(
-            (self.reg_max * 2, self.nc), 1
-        )
+            (self.reg_max * 2, self.nc), 1)
 
         pred_scores = pred_scores.permute(0, 2, 1).contiguous()
         pred_offsets = pred_offsets.permute(0, 2, 1).contiguous()
@@ -363,7 +362,7 @@ class v8LocalizationLoss:
         This is an adaptation of the YOLOv5 center point regression formula
         (https://github.com/ultralytics/yolov5/issues/12888#issuecomment-2045609546). 
         """
-        pred_locations = anchor_points.repeat(1, self.reg_max) + (pred_offsets.sigmoid() * 2 - 0.5)
+        pred_locations = anchor_points.repeat(1, self.reg_max) + (pred_offsets.detach().sigmoid() * 2 - 0.5)
         anchors_min = anchor_points - 0.5
         anchors_max = anchor_points + 1.5 
 
@@ -386,12 +385,9 @@ class v8LocalizationLoss:
         # loss[1] = self.varifocal_loss(pred_scores, target_scores, target_labels) / target_scores_sum  # VFL way
         loss[1] = self.bce(pred_scores, target_scores.to(dtype)).sum() / target_scores_sum  # BCE
 
-        if math.isnan(loss[1]):
-            print("BP")
-
         # localization loss
         if fg_mask.sum():
-            #radii_t = generate_radii_t(radii=self.radii, cls=target_labels[fg_mask])
+            #radii_t = generate_radii_t(radii=self.radii, cls=target_labels[fg_mask].detach())
             target_locations /= stride_tensor
             loss[0] = self.loc_loss(pred_locations=pred_locations, 
                                     target_locations=target_locations,

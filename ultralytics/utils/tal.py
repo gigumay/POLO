@@ -335,7 +335,7 @@ class LocTaskAlignedAssigner(nn.Module):
         pos_dist = (dist_scores * mask_pos).amax(dim=-1, keepdim=True)  # b, max_num_obj
         norm_align_metric = (align_metric * pos_dist / (pos_align_metrics + self.eps)).amax(-2).unsqueeze(-1)
         target_scores = target_scores * norm_align_metric
-
+        
         return target_labels, target_locations, target_scores, fg_mask.bool(), target_gt_idx
 
     def get_pos_mask(self, pd_scores, pd_locations, gt_labels, gt_radii, gt_locations, anc_points, anc_min, anc_max, mask_gt):
