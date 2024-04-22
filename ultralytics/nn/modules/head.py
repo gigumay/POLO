@@ -104,9 +104,10 @@ class Locate(nn.Module):
         self.nc = nc  # number of classes
         self.nl = len(ch)  # number of detection layers
         self.reg_max = 1  
+        self.channel_dims = 16
         self.no = nc + self.reg_max * 2  # number of outputs per anchor
         self.stride = torch.zeros(self.nl)  # strides computed during build
-        c2, c3 = max((3, ch[0] // 2, self.reg_max * 2)), max(ch[0], min(self.nc, 100))  # channels
+        c2, c3 = max((16, ch[0] // 4, self.channel_dims * 4)), max(ch[0], min(self.nc, 100))  # channels
         self.cv2 = nn.ModuleList(
             nn.Sequential(Conv(x, c2, 3), Conv(c2, c2, 3), nn.Conv2d(c2, 2 * self.reg_max, 1)) for x in ch
         )

@@ -115,7 +115,7 @@ class HausdorffLoss(nn.Module):
         super().__init__()
 
     def forward(self, pred_locations, target_locations, fg_mask):
-        # When there is no AMP casting needs to be taken care of manually
+        # When there is no AMP, casting needs to be taken care of manually
         try:
             pairwise_dist = torch.cdist(pred_locations[fg_mask], target_locations[fg_mask])
         except:
@@ -133,7 +133,7 @@ class DoRLoss(nn.Module):
     def forward(self, pred_locations, target_locations, target_scores, target_scores_sum, radii, fg_mask):
         """DoR loss."""
         weight = target_scores.sum(-1)[fg_mask].unsqueeze(-1)
-        dor = loc_dor(loc1=pred_locations[fg_mask], loc2=target_locations[fg_mask], radii=radii)
+        dor = loc_dor(loc1=pred_locations[fg_mask], loc2=target_locations[fg_mask], radii=radii[fg_mask])
         
         # Here I could also use 1 - 1/DoR.
         loss_dor = (dor * weight).sum() / target_scores_sum
@@ -147,12 +147,11 @@ class EuclidLoss(nn.Module):
         super().__init__()
 
     def forward(self, pred_locations, target_locations, fg_mask):
-
-        euclid_dist = torch.sqrt(((pred_locations[fg_mask] - target_locations[fg_mask]) **2).sum(dim=1))
-
         assert pred_locations[fg_mask].shape[0] == target_locations[fg_mask].shape[0]   # sanity chek
 
-        loss_euclid = euclid_dist.sum() / pred_locations[fg_mask].shape[0]
+        mse_loss = F.mse_loss(pred_locations[fg_mask], target_locations[fg_mask], reduction='none')
+        loss_euclid = mse_loss.sum() / pred_locations[fg_mask].shape[0]
+
         return loss_euclid
 
 
@@ -308,7 +307,7 @@ class v8LocalizationLoss:
         h = model.args  # hyperparameters
         m = model.model[-1]  # Locate() module
         self.bce = nn.BCEWithLogitsLoss(reduction="none")
-        self.loc_loss = EuclidLoss()
+        self.loc_loss = DoRLoss()
         self.radii = model.radii
         self.hyp = h
         self.stride = m.stride  # model strides
@@ -362,7 +361,7 @@ class v8LocalizationLoss:
         This is an adaptation of the YOLOv5 center point regression formula
         (https://github.com/ultralytics/yolov5/issues/12888#issuecomment-2045609546). 
         """
-        pred_locations = anchor_points.repeat(1, self.reg_max) + (pred_offsets.detach().sigmoid() * 2 - 0.5)
+        pred_locations = anchor_points.repeat(1, self.reg_max) + (pred_offsets.sigmoid() * 2 - 0.5)
         anchors_min = anchor_points - 0.5
         anchors_max = anchor_points + 1.5 
 
@@ -387,14 +386,21 @@ class v8LocalizationLoss:
 
         # localization loss
         if fg_mask.sum():
-            #radii_t = generate_radii_t(radii=self.radii, cls=target_labels[fg_mask].detach())
+            radii_t = generate_radii_t(radii=self.radii, cls=target_labels) / stride_tensor.squeeze()
             target_locations /= stride_tensor
             loss[0] = self.loc_loss(pred_locations=pred_locations, 
                                     target_locations=target_locations,
+                                    target_scores=target_scores,
+                                    target_scores_sum=target_scores_sum,
+                                    radii=radii_t,
                                     fg_mask=fg_mask)
 
         loss[0] *= self.hyp.loc  # loc gain
         loss[1] *= self.hyp.cls  # cls gain
+
+        # DEBUG
+        if math.isnan(loss[0]) or math.isnan(loss[1]):
+            print("BP")
 
         return loss.sum() * batch_size, loss.detach()  # loss(loc, cls)
 
