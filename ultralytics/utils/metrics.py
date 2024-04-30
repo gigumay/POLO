@@ -289,7 +289,7 @@ def smooth_BCE(eps=0.1):
     return 1.0 - 0.5 * eps, 0.5 * eps
 
 
-def loc_dor_pw(loc1, loc2, radii):
+def loc_dor_pw(loc1, loc2, radii, eps=1e-7):
     """
     Calculate the pairwise distance-over-radius (DoR) of locations. Both sets of locations are expected to be in
     (x, y) format.
@@ -299,15 +299,16 @@ def loc_dor_pw(loc1, loc2, radii):
         loc1 (torch.Tensor): A tensor of shape (N, 2) representing N locations
         loc2 (torch.Tensor): A tensor of shape (M, 2) representing M locations.
         radii (torch.Tensor): A tensor (N, 1) specifying the radii to use for the DoR calculation.
+        eps (float, optional): A small value to avoid division by zero. Defaults to 1e-7.
     Returns:
         (torch.Tensor): An NxM tensor containing the pairwise DoR values for every element in loc1 and loc2.
     """
     pairwise_dist = torch.cdist(loc1, loc2)
     pw_dor = pairwise_dist / radii.view(loc1.shape[0], -1)
 
-    return pw_dor
+    return pw_dor + eps
 
-def loc_dor(loc1, loc2, radii):
+def loc_dor(loc1, loc2, radii, eps=1e-7):
     """
     Calculate the Distance-over-Radius (DoR) of loc1 and loc2. Both tensors must have two columns
     (meanign that they are expected in the (x,y) format). loc1 can have either one row or as many as 
@@ -317,6 +318,7 @@ def loc_dor(loc1, loc2, radii):
         loc1 (torch.Tensor): A tensor of shape (1 or N, 2) representing 1 or N locations
         loc2 (torch.Tensor): A tensor of shape (N, 2) representing N locations.
         radii (torch.Tensor): A tensor (1 or N) specifying the radius values
+         eps (float, optional): A small value to avoid division by zero. Defaults to 1e-7.
     Returns:
         (torch.Tensor): A tensor (N) containing the DoR values.
 
@@ -326,7 +328,25 @@ def loc_dor(loc1, loc2, radii):
     euclid_dist = torch.sqrt(((loc1 - loc2) **2).sum(dim=1))
     dor = euclid_dist / radii
 
-    return dor
+    return dor + eps
+
+def euclid_dist(loc1, loc2, eps=1e-7):
+    """
+    Calculate the euclidean distance between loc1 and loc2. Both tensors must have two columns
+    (meanign that they are expected in the (x,y) format). loc1 can have either one row or as many as 
+    loc2. In any case the output will have the same amount of elements as loc2 has rows. 
+
+    Args:
+        loc1 (torch.Tensor): A tensor of shape (1 or N, 2) representing 1 or N locations
+        loc2 (torch.Tensor): A tensor of shape (N, 2) representing N locations.
+    Returns:
+        (torch.Tensor): A tensor (N) containing the distance values.
+
+    """
+
+    return torch.sqrt(((loc1 - loc2) **2).sum(dim=1)) + eps
+
+
 
 
 
@@ -494,7 +514,7 @@ class ConfusionMatrix:
         tp = self.matrix.diagonal()  # true positives
         fp = self.matrix.sum(1) - tp  # false positives
         # fn = self.matrix.sum(0) - tp  # false negatives (missed detections)
-        return (tp[:-1], fp[:-1]) if self.task == "detect" else (tp, fp)  # remove background class if task=detect
+        return (tp[:-1], fp[:-1]) if self.task == "detect" or self.task == "locate" else (tp, fp)  # remove background class if task=detect
 
     @TryExcept("WARNING ⚠️ ConfusionMatrix plot failure")
     @plt_settings()

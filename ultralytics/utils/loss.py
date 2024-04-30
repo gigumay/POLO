@@ -133,15 +133,14 @@ class DoRLoss(nn.Module):
     def forward(self, pred_locations, target_locations, target_scores, target_scores_sum, radii, fg_mask):
         """DoR loss."""
         weight = target_scores.sum(-1)[fg_mask].unsqueeze(-1)
-        dor = loc_dor(loc1=pred_locations[fg_mask], loc2=target_locations[fg_mask], radii=radii[fg_mask])
+        dor = loc_dor(loc1=pred_locations[fg_mask], loc2=target_locations[fg_mask], radii=radii[fg_mask]).clamp(0, 1)
         
-        # Here I could also use 1 - 1/DoR.
         loss_dor = (dor * weight).sum() / target_scores_sum
 
         return loss_dor
     
-class EuclidLoss(nn.Module):
-    """Euclidean Distance based loss as found in https://arxiv.org/pdf/2107.12746.pdf"""
+class MSELoss(nn.Module):
+    """MSE based loss as found in https://arxiv.org/pdf/2107.12746.pdf"""
 
     def __init__(self):
         super().__init__()
@@ -150,9 +149,9 @@ class EuclidLoss(nn.Module):
         assert pred_locations[fg_mask].shape[0] == target_locations[fg_mask].shape[0]   # sanity chek
 
         mse_loss = F.mse_loss(pred_locations[fg_mask], target_locations[fg_mask], reduction='none')
-        loss_euclid = mse_loss.sum() / pred_locations[fg_mask].shape[0]
+        loss_final = mse_loss.sum() / pred_locations[fg_mask].shape[0]
 
-        return loss_euclid
+        return loss_final
 
 
 class RotatedBboxLoss(BboxLoss):
@@ -307,7 +306,7 @@ class v8LocalizationLoss:
         h = model.args  # hyperparameters
         m = model.model[-1]  # Locate() module
         self.bce = nn.BCEWithLogitsLoss(reduction="none")
-        self.loc_loss = DoRLoss()
+        self.loc_loss = MSELoss()
         self.radii = model.radii
         self.hyp = h
         self.stride = m.stride  # model strides
@@ -369,7 +368,6 @@ class v8LocalizationLoss:
         target_labels, target_locations, target_scores, fg_mask, _ = self.assigner(
             pd_scores=pred_scores.detach().sigmoid(),
             pd_locations=(pred_locations.detach() * stride_tensor).type(gt_locations.dtype),
-            anc_points=anchor_points * stride_tensor,
             anc_min=anchors_min * stride_tensor,
             anc_max=anchors_max * stride_tensor, 
             gt_labels=gt_labels,
@@ -377,8 +375,7 @@ class v8LocalizationLoss:
             gt_locations=gt_locations,
             mask_gt=mask_gt 
         )
-
-        target_scores_sum = max(target_scores.sum(), 1)
+        target_scores_sum = max((target_scores).sum(), 1)
 
         # Cls loss
         # loss[1] = self.varifocal_loss(pred_scores, target_scores, target_labels) / target_scores_sum  # VFL way
@@ -390,17 +387,12 @@ class v8LocalizationLoss:
             target_locations /= stride_tensor
             loss[0] = self.loc_loss(pred_locations=pred_locations, 
                                     target_locations=target_locations,
-                                    target_scores=target_scores,
-                                    target_scores_sum=target_scores_sum,
-                                    radii=radii_t,
                                     fg_mask=fg_mask)
 
         loss[0] *= self.hyp.loc  # loc gain
         loss[1] *= self.hyp.cls  # cls gain
 
-        # DEBUG
-        if math.isnan(loss[0]) or math.isnan(loss[1]):
-            print("BP")
+        assert not math.isnan(loss[0]) and not math.isnan(loss[1]), "Loss is nan!"
 
         return loss.sum() * batch_size, loss.detach()  # loss(loc, cls)
 

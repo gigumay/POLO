@@ -2,9 +2,10 @@
 
 import torch
 import torch.nn as nn
+import torch.functional as F 
 
 from .checks import check_version
-from .metrics import bbox_iou, probiou, loc_dor
+from .metrics import bbox_iou, probiou, loc_dor, euclid_dist
 from .ops import xywhr2xyxyxyxy
 
 TORCH_1_10 = check_version(torch.__version__, "1.10.0")
@@ -284,7 +285,7 @@ class LocTaskAlignedAssigner(nn.Module):
         self.eps = eps
 
     @torch.no_grad()
-    def forward(self, pd_scores, pd_locations, anc_points, anc_min, anc_max, gt_labels, gt_radii, gt_locations, mask_gt):
+    def forward(self, pd_scores, pd_locations, anc_min, anc_max, gt_labels, gt_radii, gt_locations, mask_gt):
         """
         Compute the task-aligned assignment. Reference code is available at
         https://github.com/Nioolek/PPYOLOE_pytorch/blob/master/ppyoloe/assigner/tal_assigner.py.
@@ -321,7 +322,7 @@ class LocTaskAlignedAssigner(nn.Module):
 
         mask_pos, align_metric, dist_scores = self.get_pos_mask(
             pd_scores=pd_scores, pd_locations=pd_locations, gt_labels=gt_labels, gt_radii=gt_radii,gt_locations=gt_locations, 
-            anc_points=anc_points, anc_min=anc_min, anc_max=anc_max, mask_gt=mask_gt
+            anc_min=anc_min, anc_max=anc_max, mask_gt=mask_gt
         )
 
         target_gt_idx, fg_mask, mask_pos = self.select_closest_locs(mask_pos, dist_scores, self.n_max_locs)
@@ -338,7 +339,7 @@ class LocTaskAlignedAssigner(nn.Module):
         
         return target_labels, target_locations, target_scores, fg_mask.bool(), target_gt_idx
 
-    def get_pos_mask(self, pd_scores, pd_locations, gt_labels, gt_radii, gt_locations, anc_points, anc_min, anc_max, mask_gt):
+    def get_pos_mask(self, pd_scores, pd_locations, gt_labels, gt_radii, gt_locations, anc_min, anc_max, mask_gt):
         """Mas out cells that do not contian/cant reach any gts (b, max_num_obj, h*w)."""
         candidates_mask = self.select_candidates_that_contain_gts(anc_min=anc_min, anc_max=anc_max, gt_locations=gt_locations)
         # Get anchor_align metric, (b, max_num_obj, h*w)
@@ -370,8 +371,7 @@ class LocTaskAlignedAssigner(nn.Module):
         gt_rad = gt_radii.unsqueeze(2).expand(-1, -1, na, -1)[mask_gt].squeeze()
         dor = loc_dor(gt_locs, pd_locs, gt_rad)
         
-        dist_scores[mask_gt] = 1 / (1 + dor) 
-
+        dist_scores[mask_gt] = (1 - dor).clamp(0)
         align_metric = loc_scores.pow(self.alpha) * dist_scores.pow(self.beta)
 
         return align_metric, dist_scores
