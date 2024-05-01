@@ -480,7 +480,7 @@ class ConfusionMatrix:
         understand, this removes the need to implement a condition to count double detections as 
         false positives - at least for validation. 
         '''
-        x = torch.where(dor <= self.dor_thres)
+        x = torch.where(dor < self.dor_thres)
         if x[0].shape[0]:
             matches = torch.cat((torch.stack(x, 1), dor[x[0], x[1]][:, None]), 1).cpu().numpy()
             if x[0].shape[0] > 1:
