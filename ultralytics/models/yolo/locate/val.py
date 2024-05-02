@@ -28,13 +28,12 @@ class LocalizationValidator(BaseValidator):
         ```
     """
 
-    def __init__(self, dataloader=None, radii=None, save_dir=None, pbar=None, args=None, _callbacks=None):
+    def __init__(self, dataloader=None, save_dir=None, pbar=None, args=None, _callbacks=None):
         """Initialize detection model with necessary variables and settings."""
         super().__init__(dataloader, save_dir, pbar, args, _callbacks)
         self.nt_per_class = None
         self.is_coco = False
         self.class_map = None
-        self.radii = radii
         self.args.task = "locate"
         self.metrics = LocMetrics(save_dir=self.save_dir, on_plot=self.on_plot)
         self.dorv = torch.linspace(1.0, 0.1, 10)  # dor vector for mAP@1:0.1
@@ -88,7 +87,7 @@ class LocalizationValidator(BaseValidator):
             prediction=preds,
             conf_thres=self.args.conf,
             dor_thres=self.args.dor,
-            radii=self.radii,
+            radii=self.data["radii"],
             labels=self.lb,
             multi_label=True,
             agnostic=self.args.single_cls,
@@ -149,7 +148,7 @@ class LocalizationValidator(BaseValidator):
             if nl:
                 stat["tp"] = self._process_batch(predn, location, cls)
                 if self.args.plots:
-                    radii_t = ops.generate_radii_t(radii=self.radii, cls=cls)
+                    radii_t = ops.generate_radii_t(radii=self.data["radii"], cls=cls)
                     self.confusion_matrix.process_batch_loc(localizations=predn, gt_locs=location, gt_cls=cls, radii=radii_t)
             for k in self.stats.keys():
                 self.stats[k].append(stat[k])
@@ -195,7 +194,7 @@ class LocalizationValidator(BaseValidator):
                 )
 
     def _process_batch(self, detections, gt_locations, gt_cls):
-        radii_t = ops.generate_radii_t(radii=self.radii, cls=gt_cls)
+        radii_t = ops.generate_radii_t(radii=self.data["radii"], cls=gt_cls)
         dor = loc_dor_pw(loc1=gt_locations, loc2=detections[:, :2], radii=radii_t)
         return self.match_predictions_loc(pred_classes=detections[:, 3], true_classes=gt_cls, dor=dor)
 

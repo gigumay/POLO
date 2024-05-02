@@ -79,7 +79,7 @@ class LocalizationTrainer(BaseTrainer):
         # self.args.cls *= self.data["nc"] / 80 * 3 / nl  # scale to classes and layers
         # self.args.cls *= (self.args.imgsz / 640) ** 2 * 3 / nl  # scale to image size and layers
         self.model.nc = self.data["nc"]  # attach number of classes to model
-        self.model.names = self.data["names"]  # attach class names to model
+        self.model.names = self.data["names"]  # attach class names to model  
         self.model.radii = self.data["radii"]  # attach radii for each class   
         self.model.args = self.args  # attach hyperparameters to model
         # TODO: self.model.class_weights = labels_to_class_weights(dataset.labels, nc).to(device) * nc
@@ -95,7 +95,7 @@ class LocalizationTrainer(BaseTrainer):
         """Returns a LocalizationValidator for YOLO model validation."""
         self.loss_names = "loc_loss", "cls_loss"
         return yolo.locate.LocalizationValidator(
-            self.test_loader, self.model.radii, save_dir=self.save_dir, args=copy(self.args), _callbacks=self.callbacks
+            self.test_loader, save_dir=self.save_dir, args=copy(self.args), _callbacks=self.callbacks
         )
 
     def label_loss_items(self, loss_items=None, prefix="train"):
