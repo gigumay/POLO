@@ -304,7 +304,7 @@ class BaseValidator:
                 matches = np.array(matches).T
                 if matches.shape[0]:
                     if matches.shape[0] > 1:
-                        matches = matches[dor[matches[:, 0], matches[:, 1]].argsort()[::-1]]
+                        matches = matches[dor[matches[:, 0], matches[:, 1]].argsort()]
                         matches = matches[np.unique(matches[:, 1], return_index=True)[1]]
                         # matches = matches[matches[:, 2].argsort()[::-1]]
                         matches = matches[np.unique(matches[:, 0], return_index=True)[1]]

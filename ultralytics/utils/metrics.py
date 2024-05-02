@@ -473,20 +473,13 @@ class ConfusionMatrix:
         localization_classes = localizations[:, 3].int()
         dor = loc_dor_pw(loc1=gt_locs, loc2=localizations[:, :2], radii=radii)
 
-
-        '''
-        The following block finds predictions whose confidence exceeds the threshold, and removes 
-        duplicates for a given ground truth (the more confident prediction is kept). As far as I
-        understand, this removes the need to implement a condition to count double detections as 
-        false positives - at least for validation. 
-        '''
         x = torch.where(dor < self.dor_thres)
         if x[0].shape[0]:
             matches = torch.cat((torch.stack(x, 1), dor[x[0], x[1]][:, None]), 1).cpu().numpy()
             if x[0].shape[0] > 1:
-                matches = matches[matches[:, 2].argsort()[::-1]]
+                matches = matches[matches[:, 2].argsort()]
                 matches = matches[np.unique(matches[:, 1], return_index=True)[1]]
-                matches = matches[matches[:, 2].argsort()[::-1]]
+                matches = matches[matches[:, 2].argsort()]
                 matches = matches[np.unique(matches[:, 0], return_index=True)[1]]
         else:
             matches = np.zeros((0, 3))
