@@ -128,6 +128,7 @@ class DoRLoss(nn.Module):
     """Same as the IoU-based loss of the BBoxLoss class, but with DoR instead of IoU as a metric."""
 
     def __init__(self):
+        raise NotImplementedError("This loss results in exploding gradients and couldn't be fixed")
         super().__init__()
 
     def forward(self, pred_locations, target_locations, target_scores, target_scores_sum, radii, fg_mask):
@@ -306,7 +307,7 @@ class v8LocalizationLoss:
         h = model.args  # hyperparameters
         m = model.model[-1]  # Locate() module
         self.bce = nn.BCEWithLogitsLoss(reduction="none")
-        self.loc_loss = MSELoss()
+        self.loc_loss = HausdorffLoss()
         self.radii = model.radii
         self.hyp = h
         self.stride = m.stride  # model strides
