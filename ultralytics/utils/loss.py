@@ -307,7 +307,7 @@ class v8LocalizationLoss:
         h = model.args  # hyperparameters
         m = model.model[-1]  # Locate() module
         self.bce = nn.BCEWithLogitsLoss(reduction="none")
-        self.loc_loss = HausdorffLoss()
+        self.loc_loss = MSELoss()
         self.radii = model.radii
         self.hyp = h
         self.stride = m.stride  # model strides
