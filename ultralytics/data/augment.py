@@ -949,6 +949,7 @@ class Format:
 
     def __call__(self, labels):
         """Return formatted image, classes, bounding boxes, locations & keypoints to be used by 'collate_fn'."""
+        
         img = labels.pop("img")
         h, w = img.shape[:2]
         cls = labels.pop("cls")
@@ -975,7 +976,8 @@ class Format:
             labels["bboxes"] = torch.from_numpy(instances.bboxes) if nl else torch.zeros((nl, 4)) 
         if self.return_locations:
             labels["locations"] = torch.from_numpy(instances.locations) if nl else torch.zeros((nl, 2))
-            labels["radii"] = torch.from_numpy(labels.pop("radii")) if nl else torch.zeros(nl)
+            radii = labels.pop("radii")
+            labels["radii"] = torch.from_numpy(radii) if nl else torch.zeros(nl)
         if self.return_keypoint:
             labels["keypoints"] = torch.from_numpy(instances.keypoints)
         if self.return_obb:
