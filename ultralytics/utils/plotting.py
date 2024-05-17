@@ -859,11 +859,12 @@ def plot_images(
             elif len(locations):
                 locs = locations[idx]
                 conf = confs[idx] if confs is not None else None  # check for confidence presence (label vs pred)
-                if locs[:, :2].max() <= 1.1:   # if normalized with tolerance 0.1
-                    locs[:, 0] *= w     # scale to pixels
-                    locs[:, 1] *= h
-                elif scale < 1: # absolute coords need scale if image scales
-                    locs[:, :2] *= scale
+                if len(locs):
+                    if locs[:, :2].max() <= 1.1:   # if normalized with tolerance 0.1
+                        locs[:, 0] *= w     # scale to pixels
+                        locs[:, 1] *= h
+                    elif scale < 1: # absolute coords need scale if image scales
+                        locs[:, :2] *= scale
                 locs[:, 0] += x
                 locs[:, 1] += y
                 for j, loc in enumerate(locs.astype(np.int64).tolist()):
