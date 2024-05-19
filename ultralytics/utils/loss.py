@@ -123,22 +123,6 @@ class HausdorffLoss(nn.Module):
         res = torch.mean(torch.min(pairwise_dist, dim=0).values) + torch.mean(torch.min(pairwise_dist, dim=1).values)
         return res
         
-
-class DoRLoss(nn.Module): 
-    """Same as the IoU-based loss of the BBoxLoss class, but with DoR instead of IoU as a metric."""
-
-    def __init__(self):
-        raise NotImplementedError("This loss results in exploding gradients and couldn't be fixed")
-        super().__init__()
-
-    def forward(self, pred_locations, target_locations, target_scores, target_scores_sum, radii, fg_mask):
-        """DoR loss."""
-        weight = target_scores.sum(-1)[fg_mask].unsqueeze(-1)
-        dor = loc_dor(loc1=pred_locations[fg_mask], loc2=target_locations[fg_mask], radii=radii[fg_mask]).clamp(0, 1)
-        
-        loss_dor = (dor * weight).sum() / target_scores_sum
-
-        return loss_dor
     
 class MSELoss(nn.Module):
     """MSE based loss as found in https://arxiv.org/pdf/2107.12746.pdf"""
@@ -307,7 +291,7 @@ class v8LocalizationLoss:
         h = model.args  # hyperparameters
         m = model.model[-1]  # Locate() module
         self.bce = nn.BCEWithLogitsLoss(reduction="none")
-        self.loc_loss = MSELoss()
+        self.loc_loss = HausdorffLoss()
         self.radii = model.radii
         self.hyp = h
         self.stride = m.stride  # model strides

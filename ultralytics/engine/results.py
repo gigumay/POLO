@@ -113,7 +113,7 @@ class Results(SimpleClass):
         self.orig_img = orig_img
         self.orig_shape = orig_img.shape[:2]
         self.boxes = Boxes(boxes, self.orig_shape) if boxes is not None else None  # native size boxes
-        self.locations = (Locations, self.orig_shape) if locations is not None else None # native size locations
+        self.locations = Locations(locations, self.orig_shape) if locations is not None else None # native size locations
         self.masks = Masks(masks, self.orig_shape) if masks is not None else None  # native size or imgsz masks
         self.probs = Probs(probs) if probs is not None else None
         self.keypoints = Keypoints(keypoints, self.orig_shape) if keypoints is not None else None
