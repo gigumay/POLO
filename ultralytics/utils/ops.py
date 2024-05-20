@@ -1047,7 +1047,7 @@ def clean_str(s):
     return re.sub(pattern="[|@#!¡·$€%&()=?¿^*;:,¨´><+]", repl="_", string=s)
 
 
-def generate_radii_t(radii, cls):
+def generate_radii_t(radii: dict, cls: torch.Tensor):
     """
     For a tensor of class labels, generate a tensor of the same dimensions containing each classes radius 
     value. DON'T USE DURING TRAINING! 
