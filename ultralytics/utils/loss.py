@@ -368,7 +368,6 @@ class v8LocalizationLoss:
 
         # localization loss
         if fg_mask.sum():
-            radii_t = generate_radii_t(radii=self.radii, cls=target_labels) / stride_tensor.squeeze()
             target_locations /= stride_tensor
             loss[0] = self.loc_loss(pred_locations=pred_locations, 
                                     target_locations=target_locations,
