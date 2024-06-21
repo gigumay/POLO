@@ -168,6 +168,7 @@ class KeypointLoss(nn.Module):
 
     def __init__(self, sigmas) -> None:
         """Initialize the KeypointLoss class."""
+        raise DeprecationWarning("Currently using the Hausdorff-loss for training. Please use the MSE-loss instead.")
         super().__init__()
         self.sigmas = sigmas
 
@@ -291,7 +292,7 @@ class v8LocalizationLoss:
         h = model.args  # hyperparameters
         m = model.model[-1]  # Locate() module
         self.bce = nn.BCEWithLogitsLoss(reduction="none")
-        self.loc_loss = HausdorffLoss()
+        self.loc_loss = MSELoss()
         self.radii = model.radii
         self.hyp = h
         self.stride = m.stride  # model strides

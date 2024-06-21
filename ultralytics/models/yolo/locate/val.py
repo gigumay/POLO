@@ -30,7 +30,7 @@ class LocalizationValidator(BaseValidator):
 
     def __init__(self, dataloader=None, save_dir=None, pbar=None, args=None, _callbacks=None):
         """Initialize detection model with necessary variables and settings."""
-        if "radii" in args.keys():
+        if "radii" in args:
             radii = args.pop("radii")
         else:
             radii = None

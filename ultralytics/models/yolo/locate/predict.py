@@ -44,7 +44,10 @@ class LocalizationPredictor(BasePredictor):
         results = []
         for i, pred in enumerate(preds):
             orig_img = orig_imgs[i]
-            pred[:, :2] = ops.scale_locations(img.shape[2:], pred[:, :2], orig_img.shape)
+            pred[:, :2] = ops.scale_locations(img.shape[2:], pred[:, :2], orig_img.shape, remove_clipped=False)
+            outside_img = (pred[:, 0] == 0) & (pred[:, 1] == 0)
+            pred = pred[~outside_img]
+
             img_path = self.batch[0][i]
             results.append(Results(orig_img, path=img_path, names=self.model.names, locations=pred))
         return results
