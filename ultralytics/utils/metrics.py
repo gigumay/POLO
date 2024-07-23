@@ -303,7 +303,7 @@ def loc_dor_pw(loc1, loc2, radii, eps=1e-7):
     Returns:
         (torch.Tensor): An NxM tensor containing the pairwise DoR values for every element in loc1 and loc2.
     """
-    pairwise_dist = torch.cdist(loc1, loc2)
+    pairwise_dist = torch.cdist(loc1, loc2, compute_mode='donot_use_mm_for_euclid_dist')
     pw_dor = pairwise_dist / radii.view(loc1.shape[0], -1)
 
     return pw_dor + eps

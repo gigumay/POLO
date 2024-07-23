@@ -1059,6 +1059,8 @@ def generate_radii_t(radii: dict, cls: torch.Tensor):
     Returns:
         A tensor containing the corresponding radius value for each element in the cls tensor.
     """
-
+    if cls.numel() == 0:
+        return torch.empty(0)
+    
     radii_np = np.vectorize(lambda x: radii[x])(cls.cpu())
     return torch.from_numpy(radii_np).to(cls.device)

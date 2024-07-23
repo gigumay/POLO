@@ -351,7 +351,7 @@ class v8LocalizationLoss:
         anchors_max = anchor_points + 1.5 
 
 
-        target_labels, target_locations, target_scores, fg_mask, _ = self.assigner(
+        _, target_locations, target_scores, fg_mask, _ = self.assigner(
             pd_scores=pred_scores.detach().sigmoid(),
             pd_locations=(pred_locations.detach() * stride_tensor).type(gt_locations.dtype),
             anc_min=anchors_min * stride_tensor,
