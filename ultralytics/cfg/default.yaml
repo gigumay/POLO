@@ -48,7 +48,7 @@ save_json: False # (bool) save results to JSON file
 save_hybrid: False # (bool) save hybrid version of labels (labels + additional predictions)
 conf: # (float, optional) object confidence threshold for detection (default 0.25 predict, 0.001 val)
 iou: 0.7 # (float) intersection over union (IoU) threshold for NMS
-dor: 0.3 # (float) distance over radius (DoR) threshold for NMS
+dor: 0.6 # (float) distance over radius (DoR) threshold for NMS
 max_det: 300 # (int) maximum number of detections per image
 half: False # (bool) use half precision (FP16)
 dnn: False # (bool) use OpenCV DNN for ONNX inference
@@ -96,8 +96,8 @@ warmup_epochs: 3.0 # (float) warmup epochs (fractions ok)
 warmup_momentum: 0.8 # (float) warmup initial momentum
 warmup_bias_lr: 0.1 # (float) warmup initial bias lr
 box: 7.5 # (float) box loss gain
-loc: 7.5 # (float) loc loss gain
-cls: 0.5 # (float) cls loss gain (scale with pixels)
+loc: 1.0 # (float) loc loss gain
+cls: 9.0 # (float) cls loss gain (scale with pixels)
 dfl: 1.5 # (float) dfl loss gain
 pose: 12.0 # (float) pose loss gain
 kobj: 1.0 # (float) keypoint obj loss gain
