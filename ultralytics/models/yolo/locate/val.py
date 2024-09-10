@@ -27,13 +27,17 @@ class LocalizationValidator(BaseValidator):
         validator()
         ```
     """
-
     def __init__(self, dataloader=None, save_dir=None, pbar=None, args=None, _callbacks=None):
         """Initialize detection model with necessary variables and settings."""
         if "radii" in args:
             radii = args.pop("radii")
         else:
             radii = None
+        
+        if "dor" in args:
+            dor = args.pop("dor")
+        else:
+            dor = None
 
         super().__init__(dataloader, save_dir, pbar, args, _callbacks)
         self.nt_per_class = None
@@ -42,6 +46,7 @@ class LocalizationValidator(BaseValidator):
 
         self.args.task = "locate"
         self.radii = radii
+        self.dor = dor
         self.metrics = LocMetrics(save_dir=self.save_dir, on_plot=self.on_plot)
         self.dorv = torch.linspace(1.0, 0.1, 10)  # dor vector for mAP@1:0.1
         self.ndor = self.dorv.numel()
@@ -79,7 +84,10 @@ class LocalizationValidator(BaseValidator):
         self.nc = len(model.names)
         self.metrics.names = self.names
         self.metrics.plot = self.args.plots
-        self.confusion_matrix = ConfusionMatrix(nc=self.nc, conf=self.args.conf)
+        self.confusion_matrix = ConfusionMatrix(nc=self.nc, 
+                                                dor_thresh=self.dor if self.dor else self.args.dor,
+                                                conf=self.args.conf,
+                                                task="locate")
         self.seen = 0
         self.jdict = []
         self.stats = dict(tp=[], conf=[], pred_cls=[], target_cls=[])
@@ -93,7 +101,7 @@ class LocalizationValidator(BaseValidator):
         return ops.non_max_suppression_loc(
             prediction=preds,
             conf_thres=self.args.conf,
-            dor_thres=self.args.dor,
+            dor_thres= self.dor if self.dor else self.args.dor,
             radii=self.radii if self.radii is not None else self.data["radii"],
             labels=self.lb,
             multi_label=True,
