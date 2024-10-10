@@ -345,7 +345,7 @@ class DetectionModel(BaseModel):
 class LocalizationModel(BaseModel):
     """YOLOv8 localization model."""
 
-    def __init__(self, cfg="yolov8n-loc.yaml", ch=3, nc=None, verbose=True):  # model, input channels, number of classes
+    def __init__(self, cfg="polov8n.yaml", ch=3, nc=None, verbose=True):  # model, input channels, number of classes
         """Initialize the YOLOv8 localization model with the given config and parameters."""
         super().__init__()
         self.yaml = cfg if isinstance(cfg, dict) else yaml_model_load(cfg)  # cfg dict
@@ -993,7 +993,7 @@ def guess_model_scale(model_path):
     with contextlib.suppress(AttributeError):
         import re
 
-        return re.search(r"yolov\d+([nslmx])", Path(model_path).stem).group(1)  # n, s, m, l, or x
+        return re.search(r"[yp]+olov\d+([nslmx])", Path(model_path).stem).group(1)  # n, s, m, l, or x
     return ""
 
 
@@ -1066,7 +1066,7 @@ def guess_model_task(model):
             return "pose"
         elif "-obb" in model.stem or "obb" in model.parts:
             return "obb"
-        elif "-loc" in model.stem or "locate" in model.parts:
+        elif "-loc" in model.stem or "polo" in model.stem or "locate" in model.parts:
             return "locate"
         elif "detect" in model.parts:
             return "detect"
