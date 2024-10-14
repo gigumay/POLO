@@ -122,6 +122,10 @@ model.load_state_dict(intersect, strict=False)
 model.train(dor=0.8, loc=5)
 ```
 
+POLO will produce a number of outputs during training, including visualizations of the training sampels and graphs showcasing the development of training losses and evaluation metrics. The location where these outputs will be stored can be passed to the training funtcion as well, as explained [here](https://docs.ultralytics.com/modes/train/#train-settings). 
+
+![image](./README_imgs/results.png)
+
 
 ### Validation 
 
