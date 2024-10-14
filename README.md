@@ -1,9 +1,11 @@
 # POLO - Point-based multi-class detectiom 
 ### Polo is a multi-class object detection framework that outputs and trains on point labels. The architecture largely corresponds to that of the YOLOv8 model developed by [ultralytics](https://www.ultralytics.com), which can be found on the company's official [GitHub](https://github.com/ultralytics/ultralytics/tree/main/ultralytics). Beyond the code in this repo, you can refer to [the associated research paper](https://www.google.com) for details on the changes made to the original YOLOv8 architecture.
 
+![image](./README_imgs/polo_vis)
+
 
 ## Installation
-POLO can be downloaded and installed using pip like any other python package:
+Like any other python package, POLO can be downloaded and installed using pip:
 
 `pip install git+https://github.com/gigumay/POLO.git#egg=ultralytics`
 
@@ -71,13 +73,55 @@ main_folder
         +-- img0_val.txt
         +-- img1_val.jpg
         +-- img1_val.txt
+        ...
 
 ```
 
 ### Loading the model and initiating training
+To load POLO please use the following code: 
+
+```
+from ultralytics import YOLO
+
+model = YOLO("polov8n.yaml")
+```
+
+Like YOLOv8, POLO comes in different sizes: n, s, m, l, and x. POLOv8x is the largest and most powerful model, but also needs the most memory and takes the longest to train. You can load whichever version you prefer simply by replacing the `n` in `"polov8n.yaml"` with one of the aforementioned letters. Furthermore, the above code snippet will load a randomly initialized POLO model. Another option is to initialize the model with the weights of a YOLOv8 model that was pre-trained on a large image set, which should help POLO extract better features and converge quicker. To do so, please run: 
+ 
+```
+from ultralytics import YOLO
+from ultralytics.utils.torch_utils import intersect_dicts
+
+model = YOLO("polov8n.yaml")
+ckpt = YOLO(f"yolov8n.pt").state_dict()
+intersect = intersect_dicts(ckpt, model.state_dict())
+model.load_state_dict(intersect, strict=False)
+```
+
+Note that this weight transfer only applies to the parameters that POLO shares with YOLO. However, since the only architectural difference between the models lies in their heads (i.e., the final convolutional layers) this will include most of the weights. 
+
+Once the model is loaded, training can be started with one line: 
+
+`model.train()`
+
+This will start training with the default parameters, which have been extensively documented by [ultralytics](https://docs.ultralytics.com/modes/train/#train-settings) and can also be found in [this repository](./ultralytics/cfg/default.yaml). Two important differences to the training of a YOLOv8 model are that when using POLO, users can pass a `dor` and `loc` parameter to the `train()` function. Through these parameters, the DoR-threshold to be used during postprocessing and model evaluation (cf. [POLO paper](htpps://www.google.com) and the below section on validation for more information), as well as the weight of the localization-loss can be adjusted. In the experiments conducted over the course of the development of POLO, we found that the radii and the DoR notably affect model accuracy. While we did identify a rule of thumb according to which these two parameters can be set, we encourage users to experiment with these settings. 
+
+Below is the full code to load and train a POLO model, while using the weights of a pre-trained YOLOv8 and modifying the `dor`/`loc` parameter. 
+
+```
+from ultralytics import YOLO
+from ultralytics.utils.torch_utils import intersect_dicts
+
+model = YOLO("polov8n.yaml")
+
+# remove the next three lines if you wish to train from scratch
+ckpt = YOLO(f"yolov8n.pt").state_dict()
+intersect = intersect_dicts(ckpt, model.state_dict())
+model.load_state_dict(intersect, strict=False)
+
+model.train(dor=0.8, loc=5)
+```
 
 
+### Validation 
 
-
-
-- tune DoR and radii
