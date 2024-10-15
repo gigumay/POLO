@@ -129,7 +129,7 @@ POLO will produce a number of outputs during training, including visualizations 
 
 ## Validation
 In terms of code, validating POLO works exactly like validating YOLOv8, which is explained [here](https://docs.ultralytics.com/modes/val/). Conceptually however, the POLO framework measures evaluation metrics such as precision and recall based on the DoR instead of the IoU. More specifically, in YOLOv8 (or generally in bounding-box based object detectors) a prediction is counted as a true positive, if the predicted class is correct, and the predicted bounding box overlaps to a certain degree with the ground truth label. Here, the degree of overlap is measured via the IoU metric. With POLO on the other hand, a prediction is counted as a true positive, if the classes match and the predicted point is sufficiently close to the ground truth, as measured via the DoR. This definition of a true positive allows for the calculation of precision and recall like it is done for YOLOv8, as well as it enables us to define thee `mAP100` and `mAP100-10` metrics. The latter are computed in the same way as the `mAP50` and `mAP50-95` metrics in bounding-box detection, but instead of measuirng a model's accuracy at different IoU thresholds (see [here](https://docs.ultralytics.com/guides/yolo-performance-metrics/#interpreting-the-output) for a more thorough explanation), the performance is assessed depending on the DoR value.  
-It is possible to validate with a DoR threshold and radii that differ from what was used for training. To do so simply pass a floating point value and a dictionary (containign a new radius value for each class ID) when calling the validation function. Assuming that the `model` variable holds a trained POLO model:
+It is possible to validate with a DoR threshold and radii that differ from what was used for training. To do so, simply pass a floating point value and a dictionary containing a new radius value for each class ID when calling the validation function. Assuming that the `model` variable holds a trained POLO model:
 
 ```
 new_radii = {0: 60, 1: 20, 2: 55, 3: 90, 4: 30}
@@ -137,7 +137,7 @@ new_dor = 0.8
 model.val(radii=new_radii, dor=new_dor)
 ```
 
-If these parameetrs are not set, the model will use the default values specified in the [configuration file](./ultralytics/cfg/default.yaml).
+If these parameters are not set, the model will use the default values specified in the [configuration file](./ultralytics/cfg/default.yaml).
 
 
 ## Inference
