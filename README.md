@@ -1,7 +1,7 @@
 # POLO - Point-based multi-class detectiom 
-### Polo is a multi-class object detection framework that outputs and trains on point labels. The architecture largely corresponds to the code of the YOLOv8 model developed by [ultralytics](https://www.ultralytics.com), which can be found on the company's official [GitHub](https://github.com/ultralytics/ultralytics/tree/main/ultralytics). For details on POLO and the changes made to the YOLOv8 architecture, you can also refer to [the associated research paper](https://www.google.com).
+### Polo is a multi-class object detection framework that outputs and trains on point labels. The architecture largely corresponds to the code of the YOLOv8 model developed by [ultralytics](https://www.ultralytics.com), which can be found on the company's official [GitHub](https://github.com/ultralytics/ultralytics/tree/main/ultralytics). For details on POLO and the changes made to the YOLOv8 architecture, you can also refer to [the associated research paper](http://arxiv.org/abs/2410.11741).
 
-![image](./README_imgs/polo_vis)
+![image](./README_imgs/results_2)
 
 
 ## Installation
@@ -15,14 +15,14 @@ Since the POLO package is a fork of the ultralytics library, the model can be im
 
 to your script. This will not only give you access to POLO, but also to all YOLO models and functionalities (YOLOv3-8, pose-estimation, segmentation, etc.). For instructions on anything that extends beyond POLO, please consult the official [ultralytics documentation](https://docs.ultralytics.com). Note that POLO was developed in python 3.10, which therefore is the version we reccomend using when working with this package.
 ## Training POLO
-### Data-prerocessing 
+### Data-preprocessing 
 Datsets should be divided into a training- and validation-set, which should be stored in separate folders. Furthermore, like is the case for YOLOv8, the architecture of POLO is designed to take input images of size 640x640 pixels. If you are working with images that exceed this size, it can be beneficial to split them into patches that match the dimensions expected by POLO. While the framework will accept arbitrary sized inputs, large images will have to be downsampled to fit the architecture, which will reduce the resolution and may cause the loss of important features/details. 
 Also, for each image (or image-patch) in the training- and validation-set, the objects it contains must be specified as ground truth labels in a `.txt`-file. The `.txt`-files must be located in the same folder as the corresponding images, and the file-names must be identical (except, of course, for the file extension/format). In the `.txt`-file each object must be defined as a point in a separate line, and every line must be formatted as follows:
 
 `class_id radius x_rel y_rel`
 
 1. `class_id`: An integer number indicating the id of the object class.
-2. `radius`: The radius (in pixels) defined for the object class (please refer to [the original POLO paper](https://www.google.com) for details)
+2. `radius`: The radius (in pixels) defined for the object class (please refer to [the original POLO paper](http://arxiv.org/abs/2410.11741) for details)
 3. `x_rel`: The relative x-coordinate of a point lying on the object (ideally its center-point).
 4. `y_rel`: The relative y-coordinate of a point lying on the object (ideally its center-point).
 
@@ -103,7 +103,7 @@ Once the model is loaded, training can be started with one line:
 
 `model.train()`
 
-This will start training with the default parameters, which have been extensively documented by [ultralytics](https://docs.ultralytics.com/modes/train/#train-settings) and can also be found in [this file](./ultralytics/cfg/default.yaml). Two important differences to the training of a YOLOv8 model are that when using POLO, users can pass a `dor` and `loc` parameter to the `train()` function. Through these parameters, the DoR-threshold to be used during postprocessing and model evaluation (cf. [POLO paper](htpps://www.google.com) and the below section on validation for more information), as well as the weight of the localization-loss can be adjusted. In the experiments conducted over the course of the development of POLO, we found that the radii and the DoR notably affect model accuracy. While we did identify a rule of thumb according to which these two parameters can be set, we encourage users to experiment with these settings. 
+This will start training with the default parameters, which have been extensively documented by [ultralytics](https://docs.ultralytics.com/modes/train/#train-settings) and can also be found in [this file](./ultralytics/cfg/default.yaml). Two important differences to the training of a YOLOv8 model are that when using POLO, users can pass a `dor` and `loc` parameter to the `train()` function. Through these parameters, the DoR-threshold to be used during postprocessing and model evaluation (cf. [POLO paper](http://arxiv.org/abs/2410.11741) and the below section on validation for more information), as well as the weight of the localization-loss can be adjusted. In the experiments conducted over the course of the development of POLO, we found that the radii and the DoR notably affect model accuracy. While we did identify a rule of thumb according to which these two parameters can be set, we encourage users to experiment with these settings. 
 
 Below is the full code to load and train a POLO model, while using the weights of a pre-trained YOLOv8 and modifying the `dor`/`loc` parameter. 
 
@@ -141,7 +141,7 @@ If these parameters are not set, the model will use the default values specified
 
 
 ## Inference
-Perfomring inference on a set of images (or image patches) for which there is no ground truth works exactly the same as with YOLOv8 (no new/additional parameters), and we therefore point towards the [official ultralytics docs](https://docs.ultralytics.com/modes/predict/) for details. 
+Performing inference on a set of images (or image patches) for which there is no ground truth works exactly the same as with YOLOv8 (no new/additional parameters), and we therefore point towards the [official ultralytics docs](https://docs.ultralytics.com/modes/predict/) for details. 
 
 
 ## Closing remarks & missing functionalities
