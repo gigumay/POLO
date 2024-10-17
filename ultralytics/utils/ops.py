@@ -381,7 +381,7 @@ def non_max_suppression_loc(
     labels=(),
     max_det=300,
     nc=0,  # number of classes (optional)
-    cls_offset = 100,
+    cls_offset = 7860,
     max_nms=30000,
 ):
     """
