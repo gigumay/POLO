@@ -129,7 +129,7 @@ class Locate(nn.Module):
             self.shape = shape
 
         if self.export and self.format in ("saved_model", "pb", "tflite", "edgetpu", "tfjs"):  # avoid TF FlexSplitV ops
-            raise NotImplementedError("This path has not been adjusted/tested for YOLOcate!")
+            raise NotImplementedError("This path has not been adjusted/tested for POLO!")
             offsets = x_cat[:, : self.n_output_channels * 4]
             cls = x_cat[:, self.n_output_channels * 4 :]
         else:
@@ -140,7 +140,7 @@ class Locate(nn.Module):
         if self.export and self.format in ("tflite", "edgetpu"):
             # Precompute normalization factor to increase numerical stability
             # See https://github.com/ultralytics/ultralytics/issues/7371
-            raise NotImplementedError("This path has not been adjusted/tested for YOLOcate!")
+            raise NotImplementedError("This path has not been adjusted/tested for POLO!")
             grid_h = shape[2]
             grid_w = shape[3]
             grid_size = torch.tensor([grid_w, grid_h, grid_w, grid_h], device=offsets.device).reshape(1, 4, 1)
