@@ -364,14 +364,14 @@ class ConfusionMatrix:
         dor_thresh (float): The Distance over Radius threshold. 
     """
 
-    def __init__(self, nc,  dor_thresh, conf=0.25, iou_thres=0.45, task="detect"):
+    def __init__(self, nc,  dor_thresh=None, conf=0.25, iou_thres=0.45, task="detect"):
         """Initialize attributes for the YOLO model."""
         self.task = task
         self.matrix = np.zeros((nc + 1, nc + 1)) if (self.task == "detect" or self.task == "locate") else np.zeros((nc, nc))
         self.nc = nc  # number of classes
         self.conf = 0.25 if conf in (None, 0.001) else conf  # apply 0.25 if default val conf is passed
         self.iou_thres = iou_thres
-        self.dor_thres= dor_thresh if dor_thresh else 1.0
+        self.dor_thres = dor_thresh
 
     def process_cls_preds(self, preds, targets):
         """
