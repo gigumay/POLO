@@ -371,6 +371,7 @@ def loc_nms(preds, scores, radii, dor_thres) -> torch.Tensor:
 
     return order[keep_ind]
 
+
 def non_max_suppression_loc(
     prediction,
     conf_thres=0.25,
