@@ -475,7 +475,7 @@ def non_max_suppression_loc(
         i = i[:max_det]  # limit detections
 
         output[xi] = x[i]
-
+        
     return output
 
 def clip_boxes(boxes, shape):
