@@ -276,7 +276,7 @@ class BaseValidator:
         Args:
             pred_classes (torch.Tensor): Predicted class indices of shape(N,).
             true_classes (torch.Tensor): Target class indices of shape(M,).
-            dor (torch.Tensor): An NxM tensor containing the pairwise DoR values for predictions and ground of truth
+            dor (torch.Tensor): An NxM tensor containing the pairwise DoR values for predictions and ground truth
             use_scipy (bool): Whether to use scipy for matching (more precise).
 
         Returns:
