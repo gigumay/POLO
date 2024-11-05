@@ -471,9 +471,6 @@ class ConfusionMatrix:
             return
 
         localizations = localizations[localizations[:, 2] > self.conf]
-        #DEBUG 
-        torch.save(localizations, f"/home/giacomo/projects/ennedi_herdcount_POLO/results/experiments/eval_vis/post_conf.pt")
-
         gt_classes = gt_cls.int()
         localization_classes = localizations[:, 3].int()
         dor = loc_dor_pw(loc1=gt_locs, loc2=localizations[:, :2], radii=radii)
