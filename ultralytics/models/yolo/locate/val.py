@@ -189,7 +189,7 @@ class LocalizationValidator(BaseValidator):
             stats["target_cls"].astype(int), minlength=self.nc
         )  # number of targets per class
         return self.metrics.results_dict
-
+    
     def print_results(self):
         """Prints training/validation set metrics per class."""
         pf = "%22s" + "%11i" * 2 + "%11.3g" * len(self.metrics.keys)  # print format
