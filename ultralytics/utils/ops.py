@@ -335,6 +335,16 @@ def non_max_suppression(
             LOGGER.warning(f"WARNING ⚠️ NMS time limit {time_limit:.3f}s exceeded") 
             break  # time limit exceeded
 
+        #DEBUG
+        out_pre_bxs = scale_boxes(img1_shape=[672, 672], boxes=x.clone()[:, :4], img0_shape=[640, 640], ratio_pad=[[1.0, 1.0], [16, 16]])
+        x_out = torch.cat((out_pre_bxs, x[:out_pre_bxs.shape[0], 4:]), 1)
+
+        out_post_bxs = scale_boxes(img1_shape=[672, 672], boxes=output[0].clone()[:, :4], img0_shape=[640, 640], ratio_pad=[[1.0, 1.0], [16, 16]])
+        post_out = torch.cat((out_post_bxs, output[0][:out_post_bxs.shape[0], 4:]), 1)
+
+        torch.save(x_out, f"/home/giacomo/projects/MPI_ungulates_POLO/results/experiments/eval_vis_colors_bx/pre_nms.pt")
+        torch.save(post_out, f"/home/giacomo/projects/MPI_ungulates_POLO/results/experiments/eval_vis_colors_bx/post_nms.pt")
+
     return output
 
 def loc_nms(preds, scores, radii, dor_thres) -> torch.Tensor:
@@ -475,6 +485,17 @@ def non_max_suppression_loc(
         i = i[:max_det]  # limit detections
 
         output[xi] = x[i]
+
+        #DEBUG
+        out_pre_locs = scale_locations(img1_shape=[672, 672], locations=x.clone()[:, :2], img0_shape=[640, 640], ratio_pad=[[1.0, 1.0], [16, 16]])
+        x_out = torch.cat((out_pre_locs, x[:out_pre_locs.shape[0], 2:]), 1)
+
+        out_post_locs = scale_locations(img1_shape=[672, 672], locations=output[0].clone()[:, :2], img0_shape=[640, 640], ratio_pad=[[1.0, 1.0], [16, 16]])
+        post_out = torch.cat((out_post_locs, output[0][:out_post_locs.shape[0], 2:]), 1)
+
+        torch.save(x_out, f"/home/giacomo/projects/MPI_ungulates_POLO/results/experiments/eval_vis_colors/pre_nms.pt")
+        torch.save(post_out, f"/home/giacomo/projects/MPI_ungulates_POLO/results/experiments/eval_vis_colors/post_nms.pt")
+
 
     return output
 

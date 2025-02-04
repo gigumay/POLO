@@ -410,6 +410,11 @@ class ConfusionMatrix:
             return
 
         detections = detections[detections[:, 4] > self.conf]
+
+        #DEBUG 
+        torch.save(gt_bboxes, f"/home/giacomo/projects/MPI_ungulates_POLO/results/experiments/eval_vis_colors_bx/gt.pt")
+        torch.save(detections, f"/home/giacomo/projects/MPI_ungulates_POLO/results/experiments/eval_vis_colors_bx/post_conf.pt")
+
         gt_classes = gt_cls.int()
         detection_classes = detections[:, 5].int()
         is_obb = detections.shape[1] == 7 and gt_bboxes.shape[1] == 5  # with additional `angle` dimension
@@ -471,6 +476,10 @@ class ConfusionMatrix:
             return
 
         localizations = localizations[localizations[:, 2] > self.conf]
+
+        #DEBUG 
+        torch.save(localizations, f"/home/giacomo/projects/MPI_ungulates_POLO/results/experiments/eval_vis_colors/post_conf.pt")
+
         gt_classes = gt_cls.int()
         localization_classes = localizations[:, 3].int()
         dor = loc_dor_pw(loc1=gt_locs, loc2=localizations[:, :2], radii=radii)
