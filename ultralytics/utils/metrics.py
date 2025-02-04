@@ -411,9 +411,6 @@ class ConfusionMatrix:
 
         detections = detections[detections[:, 4] > self.conf]
 
-        #DEBUG 
-        torch.save(gt_bboxes, f"/home/giacomo/projects/MPI_ungulates_POLO/results/experiments/eval_vis_colors_bx/gt.pt")
-        torch.save(detections, f"/home/giacomo/projects/MPI_ungulates_POLO/results/experiments/eval_vis_colors_bx/post_conf.pt")
 
         gt_classes = gt_cls.int()
         detection_classes = detections[:, 5].int()
@@ -476,9 +473,6 @@ class ConfusionMatrix:
             return
 
         localizations = localizations[localizations[:, 2] > self.conf]
-
-        #DEBUG 
-        torch.save(localizations, f"/home/giacomo/projects/MPI_ungulates_POLO/results/experiments/eval_vis_colors/post_conf.pt")
 
         gt_classes = gt_cls.int()
         localization_classes = localizations[:, 3].int()
