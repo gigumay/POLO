@@ -335,12 +335,6 @@ def non_max_suppression(
             LOGGER.warning(f"WARNING ⚠️ NMS time limit {time_limit:.3f}s exceeded") 
             break  # time limit exceeded
 
-        out_post_bxs = scale_boxes(img1_shape=[672, 672], boxes=output[0].clone()[:, :4], img0_shape=[640, 640], ratio_pad=[[1.0, 1.0], [16, 16]])
-        post_out = torch.cat((out_post_bxs, output[0][:out_post_bxs.shape[0], 4:]), 1)
-
-        torch.save(x_out, f"/home/giacomo/projects/MPI_ungulates_POLO/results/experiments/eval_vis_colors_bx/pre_nms.pt")
-        torch.save(post_out, f"/home/giacomo/projects/MPI_ungulates_POLO/results/experiments/eval_vis_colors_bx/post_nms.pt")
-
     return output
 
 def loc_nms(preds, scores, radii, dor_thres) -> torch.Tensor:
