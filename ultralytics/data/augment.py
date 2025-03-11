@@ -365,6 +365,7 @@ class MixUp(BaseMixTransform):
 
 
 class RandomPerspective:
+    # TODO: Implement and test for points
     """
     Implements random perspective and affine transformations on images and corresponding bounding boxes, locations,
     segments, and keypoints. These transformations include rotation, translation, scaling, and shearing. 
@@ -1056,7 +1057,7 @@ def v8_transforms(dataset, imgsz, hyp, stretch=False):
     return Compose(
         [
             pre_transform,
-            MixUp(dataset, pre_transform=pre_transform, p=hyp.mixup),
+            #MixUp(dataset, pre_transform=pre_transform, p=hyp.mixup),
             #Albumentations(p=1.0),
             #RandomHSV(hgain=hyp.hsv_h, sgain=hyp.hsv_s, vgain=hyp.hsv_v),
             #RandomFlip(direction="vertical", p=hyp.flipud),
@@ -1084,7 +1085,7 @@ def v8_transforms_loc(dataset, imgsz, hyp, stretch=False):
     return Compose(
         [
             pre_transform,
-            MixUp(dataset, pre_transform=pre_transform, p=hyp.mixup),
+            #MixUp(dataset, pre_transform=pre_transform, p=hyp.mixup),
             #RandomHSV(hgain=hyp.hsv_h, sgain=hyp.hsv_s, vgain=hyp.hsv_v),
             #RandomFlip(direction="vertical", p=hyp.flipud),
             #RandomFlip(direction="horizontal", p=hyp.fliplr, flip_idx=None),
