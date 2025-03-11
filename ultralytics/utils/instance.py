@@ -362,6 +362,8 @@ class Instances:
     def clip(self, w, h):
         """Clips bounding boxes, segments, and keypoints values to stay within image boundaries.
         In the case of locations, annotations outside of the image broders are removed."""
+        good = None
+        
         if self._bboxes is not None:
             ori_format = self._bboxes.format
             self.convert_bbox(format="xyxy")
@@ -370,8 +372,8 @@ class Instances:
             if ori_format != "xyxy":
                 self.convert_bbox(format=ori_format)
         if self.locations is not None:
-            good = (self.locations[:, 0] < w) & (self.locations[:, 1] < h)
-            if not torch.any(good):
+            good = (self.locations[:, 0] > 0) & (self.locations[:, 0] < w) & (self.locations[:, 1] > 0) & (self.locations[:, 1] < h)
+            if not np.any(good):
                 print("WARNING ⚠️: clipping in 'instances.py' removed all locations!")
             self.locations = self.locations[good]
         if self.segments is not None:
@@ -380,6 +382,8 @@ class Instances:
         if self.keypoints is not None:
             self.keypoints[..., 0] = self.keypoints[..., 0].clip(0, w)
             self.keypoints[..., 1] = self.keypoints[..., 1].clip(0, h)
+
+        return good
 
     def remove_zero_area_boxes(self):
         """
