@@ -365,7 +365,6 @@ class MixUp(BaseMixTransform):
 
 
 class RandomPerspective:
-    # TODO: Implement and test for points
     """
     Implements random perspective and affine transformations on images and corresponding bounding boxes, locations,
     segments, and keypoints. These transformations include rotation, translation, scaling, and shearing. 
@@ -482,24 +481,28 @@ class RandomPerspective:
     
     def apply_locations(self, locations, M):
         """
-        Apply affine to locations.
+        Apply affine transformation to point labels.
 
         Args:
-            locations (ndarray): keypoints, [N, 2].
-            M (ndarray): affine matrix.
+            points (ndarray): Array of points with shape (N, 2) or (N, 3) if visibility is included.
+            M (ndarray): Affine transformation matrix.
 
         Returns:
-            new_locations (ndarray): locations after affine, [N, 2].
+            new_points (ndarray): Transformed points with shape (N, 2) or (N, 3).
         """
-        n = len(locations)
-        if n == 0:
+        if locations.shape[0] == 0:
             return locations
-        
-        xy = np.ones((n, 3), dtype=locations.dtype)
-        xy[:, :2] = deepcopy(locations) # deepcopy for safety but not sure if necessary
-        xy = xy @ M.T  # transform
-        
-        return xy[:, :2] / xy[:, 2:3] if self.perspective else xy[:, :2]
+
+        # Reshape to (N, 3) for homogeneous coordinates
+        xy = np.ones((locations.shape[0], 3), dtype=locations.dtype)
+        xy[:, :2] = locations  # Assign (x, y) coordinates
+
+        # Apply transformation
+        xy = xy @ M.T  # Matrix multiplication
+        xy = xy[:, :2] / xy[:, 2:3]  # Normalize if perspective transformation
+
+        return xy
+
 
     def apply_segments(self, segments, M):
         """
@@ -582,6 +585,7 @@ class RandomPerspective:
         locations = instances.locations
         segments = instances.segments
         keypoints = instances.keypoints
+
         # Update bboxes if there are segments.
         if segments is not None and len(segments):
             bboxes, segments = self.apply_segments(segments, M)
@@ -590,8 +594,9 @@ class RandomPerspective:
         if keypoints is not None:
             keypoints = self.apply_keypoints(keypoints, M)
         new_instances = Instances(bboxes, locations, segments, keypoints, bbox_format="xyxy", normalized=False)
+
         # Clip
-        new_instances.clip(*self.size)
+        good = new_instances.clip(*self.size)
 
         # Filter instances
         instances.scale(scale_w=scale, scale_h=scale, bbox_only=True)
@@ -602,6 +607,10 @@ class RandomPerspective:
             )
             labels["instances"] = new_instances[i]
             labels["cls"] = cls[i]
+        elif instances.locations is not None:
+            labels["cls"] = cls[good]
+            labels["radii"] = labels["radii"][good]
+            labels["instances"] = new_instances
         else:
             labels["instances"] = new_instances
             labels["cls"] = cls
@@ -1034,15 +1043,14 @@ def v8_transforms(dataset, imgsz, hyp, stretch=False):
     pre_transform = Compose(
         [
             Mosaic(dataset, imgsz=imgsz, p=hyp.mosaic),
-            #CopyPaste(p=hyp.copy_paste),
-            #RandomPerspective(
-            #    degrees=hyp.degrees,
-            #    translate=hyp.translate,
-            #    scale=hyp.scale,
-            #    shear=hyp.shear,
-            #    perspective=hyp.perspective,
-            #    pre_transform=None if stretch else LetterBox(new_shape=(imgsz, imgsz)),
-            #),
+            RandomPerspective(
+                degrees=hyp.degrees,
+                translate=hyp.translate,
+                scale=hyp.scale,
+                shear=hyp.shear,
+                perspective=hyp.perspective,
+                pre_transform=None if stretch else LetterBox(new_shape=(imgsz, imgsz)),
+            ),
         ]
     )
     flip_idx = dataset.data.get("flip_idx", [])  # for keypoints augmentation
@@ -1070,15 +1078,15 @@ def v8_transforms_loc(dataset, imgsz, hyp, stretch=False):
     """Convert images to a size suitable for YOLOv8 training."""
     pre_transform = Compose(
         [
-            Mosaic(dataset, imgsz=imgsz, p=hyp.mosaic)#,
-            #RandomPerspective(
-            #    degrees=hyp.degrees,
-            #    translate=hyp.translate,
-            #    scale=hyp.scale,
-            #    shear=hyp.shear,
-            #    perspective=hyp.perspective,
-            #    pre_transform=None if stretch else LetterBox(new_shape=(imgsz, imgsz)),
-           # ),
+            Mosaic(dataset, imgsz=imgsz, p=hyp.mosaic),
+            RandomPerspective(
+                degrees=hyp.degrees,
+                translate=hyp.translate,
+                scale=hyp.scale,
+                shear=hyp.shear,
+                perspective=hyp.perspective,
+                pre_transform=None if stretch else LetterBox(new_shape=(imgsz, imgsz)),
+            ),
         ]
     )
 
