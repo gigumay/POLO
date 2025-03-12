@@ -887,10 +887,11 @@ class Albumentations:
     compression.
     """
 
-    def __init__(self, p=1.0):
+    def __init__(self, p=1.0, use_locations=False):
         """Initialize the transform object for YOLO bbox formatted params."""
         self.p = p
         self.transform = None
+        self.use_locations = use_locations
         prefix = colorstr("albumentations: ")
         try:
             import albumentations as A
@@ -899,15 +900,21 @@ class Albumentations:
 
             # Transforms
             T = [
-                A.Blur(p=0.01),
-                A.MedianBlur(p=0.01),
-                A.ToGray(p=0.01),
-                A.CLAHE(p=0.01),
-                A.RandomBrightnessContrast(p=0.0),
-                A.RandomGamma(p=0.0),
-                A.ImageCompression(quality_lower=75, p=0.0),
+                A.Blur(p=0.05),
+                A.MedianBlur(p=0.05),
+                A.ToGray(p=0.05),
+                A.CLAHE(p=0.5),
+                A.RandomBrightnessContrast(p=0.05),
+                A.RandomGamma(p=0.05),
+                A.ImageCompression(quality_lower=75, p=1.0),
             ]
-            self.transform = A.Compose(T, bbox_params=A.BboxParams(format="yolo", label_fields=["class_labels"]))
+
+            if not self.use_locations:
+                self.transform = A.Compose(T, bbox_params=A.BboxParams(format="yolo", label_fields=["class_labels"]))
+            else:
+                self.transform = A.Compose(T)
+                print(f"\n\nWARNING ⚠️   : You are using augmentations from the Albumentations package."\
+                      f" Make sure they do not affect the labels. You are using: {T}\n\n")
 
             LOGGER.info(prefix + ", ".join(f"{x}".replace("always_apply=False, ", "") for x in T if x.p))
         except ImportError:  # package not installed, skip
@@ -920,17 +927,25 @@ class Albumentations:
         im = labels["img"]
         cls = labels["cls"]
         if len(cls):
-            labels["instances"].convert_bbox("xywh")
+            if not self.use_locations:
+                labels["instances"].convert_bbox("xywh")
+                bboxes = labels["instances"].bboxes
+
             labels["instances"].normalize(*im.shape[:2][::-1])
-            bboxes = labels["instances"].bboxes
-            # TODO: add supports of segments and keypoints
+            
             if self.transform and random.random() < self.p:
-                new = self.transform(image=im, bboxes=bboxes, class_labels=cls)  # transformed
-                if len(new["class_labels"]) > 0:  # skip update if no bbox in new im
-                    labels["img"] = new["image"]
-                    labels["cls"] = np.array(new["class_labels"])
-                    bboxes = np.array(new["bboxes"], dtype=np.float32)
-            labels["instances"].update(bboxes=bboxes)
+                if not self.use_locations:
+                    new = self.transform(image=im, bboxes=bboxes, class_labels=cls)
+                    if len(new["class_labels"]) > 0:  # skip update if no bbox in new im
+                        labels["cls"] = np.array(new["class_labels"])
+                        bboxes = np.array(new["bboxes"], dtype=np.float32)  # transformed
+                else:
+                    new = self.transform(image=im)
+
+                labels["img"] = new["image"]
+
+            if not self.use_locations:
+                labels["instances"].update(bboxes=bboxes)
         return labels
 
 
@@ -1078,21 +1093,22 @@ def v8_transforms_loc(dataset, imgsz, hyp, stretch=False):
     """Convert images to a size suitable for YOLOv8 training."""
     pre_transform = Compose(
         [
-            Mosaic(dataset, imgsz=imgsz, p=hyp.mosaic),
-            RandomPerspective(
-                degrees=hyp.degrees,
-                translate=hyp.translate,
-                scale=hyp.scale,
-                shear=hyp.shear,
-                perspective=hyp.perspective,
-                pre_transform=None if stretch else LetterBox(new_shape=(imgsz, imgsz)),
-            ),
+            #Mosaic(dataset, imgsz=imgsz, p=hyp.mosaic),
+            #RandomPerspective(
+            #    degrees=hyp.degrees,
+            #    translate=hyp.translate,
+            #    scale=hyp.scale,
+            #    shear=hyp.shear,
+            #    perspective=hyp.perspective,
+            #   pre_transform=None if stretch else LetterBox(new_shape=(imgsz, imgsz)),
+            #),
         ]
     )
 
     return Compose(
         [
-            pre_transform,
+            #pre_transform,
+            Albumentations(p=1.0, use_locations=True),
             #MixUp(dataset, pre_transform=pre_transform, p=hyp.mixup),
             #RandomHSV(hgain=hyp.hsv_h, sgain=hyp.hsv_s, vgain=hyp.hsv_v),
             #RandomFlip(direction="vertical", p=hyp.flipud),
