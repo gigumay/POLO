@@ -137,6 +137,7 @@ class Model(nn.Module):
         # Load or create new YOLO model
         model = checks.check_model_file_from_stem(model)  # add suffix, i.e. yolov8n -> yolov8n.pt
         if Path(model).suffix in (".yaml", ".yml"):
+            # This already instantiates a task-specific model, but not witht he right dimensions, since it doesn't check nc, etc. 
             self._new(model, task=task, verbose=verbose)
         else:
             self._load(model, task=task)
@@ -208,6 +209,7 @@ class Model(nn.Module):
         cfg_dict = yaml_model_load(cfg)
         self.cfg = cfg
         self.task = task or guess_model_task(cfg_dict)
+        # This builds task-specific model
         self.model = (model or self._smart_load("model"))(cfg_dict, verbose=verbose and RANK == -1)  # build model
         self.overrides["model"] = self.cfg
         self.overrides["task"] = self.task
@@ -628,7 +630,7 @@ class Model(nn.Module):
         if not args.get("resume"):  # manually set model only if not resuming
             self.trainer.model = self.trainer.get_model(weights=self.model if self.ckpt else None, cfg=self.model.yaml)
             
-            if kwargs["state"] is not None:
+            if kwargs.get("state") is not None:
                 state = torch.load(kwargs["state"])
                 self.trainer.model.load_state_dict(state, strict=True)
 
