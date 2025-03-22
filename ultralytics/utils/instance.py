@@ -373,8 +373,6 @@ class Instances:
                 self.convert_bbox(format=ori_format)
         if self.locations is not None:
             good = (self.locations[:, 0] > 0) & (self.locations[:, 0] < w) & (self.locations[:, 1] > 0) & (self.locations[:, 1] < h)
-            if not np.any(good):
-                print("WARNING ⚠️: clipping in 'instances.py' removed all locations!")
             self.locations = self.locations[good]
         if self.segments is not None:
             self.segments[..., 0] = self.segments[..., 0].clip(0, w)

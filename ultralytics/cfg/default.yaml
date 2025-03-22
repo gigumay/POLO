@@ -89,6 +89,10 @@ workspace: 4 # (int) TensorRT: workspace size (GB)
 nms: False # (bool) CoreML: add NMS
 
 # Hyperparameters ------------------------------------------------------------------------------------------------------
+# IMPORTANT: when using point models, geometric augmentations (degrees, translate, scale, shear, perspective, mosaic)
+# can cause labels to be removed from images, as points - unlike boxes - cannot be split into multiple labels.
+# So apply with care in order to not remove an excessive amount of labels from ypur training set. 
+
 lr0: 0.01 # (float) initial learning rate (i.e. SGD=1E-2, Adam=1E-3)
 lrf: 0.01 # (float) final learning rate (lr0 * lrf)
 momentum: 0.937 # (float) SGD momentum/Adam beta1
