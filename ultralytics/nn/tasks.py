@@ -74,11 +74,12 @@ class BaseModel(nn.Module):
         Forward pass of the model on a single scale. Wrapper for `_forward_once` method.
 
         Args:
-            x (torch.Tensor | dict): The input image tensor or a dict including image tensor and gt labels.
+            x (torch.Tensor | dict): The input image tensor or a dict including image tensor and gt labels
 
         Returns:
             (torch.Tensor): The output of the network.
         """
+
         if isinstance(x, dict):  # for cases of training and validating while training.
             return self.loss(x, *args, **kwargs)
         return self.predict(x, *args, **kwargs)
@@ -137,6 +138,7 @@ class BaseModel(nn.Module):
             f"Reverting to single-scale inference instead."
         )
         return self._predict_once(x)
+
 
     def _profile_one_layer(self, m, x, dt):
         """

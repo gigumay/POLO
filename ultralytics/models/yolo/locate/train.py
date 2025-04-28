@@ -3,6 +3,7 @@
 import math
 import random
 from copy import copy
+import torch
 
 import numpy as np
 import torch.nn as nn
