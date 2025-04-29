@@ -996,6 +996,8 @@ class Format:
         h, w = img.shape[:2]
         cls = labels.pop("cls")
         instances = labels.pop("instances")
+        embds_prev = labels.pop("embds_prev")
+        embds_glob = labels.pop("embds_glob")
         if instances.bboxes is not None:
             instances.convert_bbox(format=self.bbox_format)
         instances.denormalize(w, h)
@@ -1014,6 +1016,8 @@ class Format:
             instances.normalize(w, h)
         labels["img"] = self._format_img(img)
         labels["cls"] = torch.from_numpy(cls) if nl else torch.zeros(nl)
+        labels["embds_prev"] = torch.from_numpy(embds_prev)
+        labels["embds_glob"] = torch.from_numpy(embds_glob)
         if instances.bboxes is not None:
             labels["bboxes"] = torch.from_numpy(instances.bboxes) if nl else torch.zeros((nl, 4)) 
         if self.return_locations:

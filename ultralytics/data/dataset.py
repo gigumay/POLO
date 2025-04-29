@@ -232,6 +232,8 @@ class YOLODataset(BaseDataset):
                 value = torch.stack(value, 0)
             if k in ["masks", "keypoints", "bboxes", "locations", "radii", "cls", "segments", "obb"]:
                 value = torch.cat(value, 0)
+            if k in ["embds_prev", "embds_glob"]:
+                value = torch.stack(value, 0)
             new_batch[k] = value
         new_batch["batch_idx"] = list(new_batch["batch_idx"])
         for i in range(len(new_batch["batch_idx"])):

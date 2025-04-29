@@ -261,6 +261,8 @@ class BaseModel(nn.Module):
             self.criterion = self.init_criterion()
 
         preds = self.forward(batch["img"]) if preds is None else preds
+        # extract embeddings of previous to last layer
+        embds = self.forward(batch["img"], embed=[len(self.model) - 2])
         return self.criterion(preds, batch)
 
     def init_criterion(self):
