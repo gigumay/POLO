@@ -262,7 +262,7 @@ class BaseModel(nn.Module):
 
         preds = self.forward(batch["img"]) if preds is None else preds
         # extract embeddings of previous to last layer
-        embds = self.forward(batch["img"], embed=[len(self.model) - 2])
+        embds = torch.stack(self.forward(batch["img"], embed=[len(self.model) - 2]), 0)
         return self.criterion(preds, batch)
 
     def init_criterion(self):

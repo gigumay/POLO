@@ -138,6 +138,14 @@ class MSELoss(nn.Module):
 
         return loss_final
 
+class MOONLoss(nn.Module):
+    """MOON loss for federated learning as found in https://arxiv.org/abs/2103.16257"""
+    
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, embds_prev, embds_glob, embds_curr):
+        pass
 
 class RotatedBboxLoss(BboxLoss):
     """Criterion class for computing training losses during training."""
