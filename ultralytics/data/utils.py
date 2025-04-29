@@ -4,6 +4,7 @@ import contextlib
 import hashlib
 import json
 import os
+import torch
 import random
 import subprocess
 import time
@@ -49,12 +50,12 @@ def img2label_paths(img_paths):
 def img2prevEmbd_paths(img_paths):
     """Define label paths as a function of image paths."""
     sa, sb = f"{os.sep}images{os.sep}", f"{os.sep}labels{os.sep}"  # /images/, /labels/ substrings
-    return [sb.join(x.rsplit(sa, 1)).rsplit(".", 1)[0] + "_prev.pt" for x in img_paths]
+    return [sb.join(x.rsplit(sa, 1)).rsplit(".", 1)[0] + "_prev.npy" for x in img_paths]
 
 def img2globEmbd_paths(img_paths):
     """Define label paths as a function of image paths."""
     sa, sb = f"{os.sep}images{os.sep}", f"{os.sep}labels{os.sep}"  # /images/, /labels/ substrings
-    return [sb.join(x.rsplit(sa, 1)).rsplit(".", 1)[0] + "_glob.pt" for x in img_paths]
+    return [sb.join(x.rsplit(sa, 1)).rsplit(".", 1)[0] + "_glob.npy" for x in img_paths]
 
 def get_hash(paths):
     """Returns a single hash value of a list of paths (files or dirs)."""
@@ -107,6 +108,7 @@ def verify_image_label(args):
     im_file, lb_file, embds_prev, embds_glob, prefix, keypoint, location, num_cls, nkpt, ndim = args
     # Number (missing, found, empty, corrupt), message, segments, keypoints
     nm, nf, ne, nc, msg, segments, keypoints = 0, 0, 0, 0, "", [], None
+
     try:
         # Verify images
         im = Image.open(im_file)
@@ -177,19 +179,30 @@ def verify_image_label(args):
                 lb = np.zeros((0, 5), dtype=np.float32)
 
         if os.path.isfile(embds_prev):
-            pass
-
+            nf += 1
+            ep = np.load(embds_prev)
+        else:
+            nm += 1
+            raise FileNotFoundError("Missing emebddings from previous model!")
+        
+        if os.path.isfile(embds_glob):
+            nf += 1
+            eg = np.load(embds_glob)
+        else:
+            nm += 1
+            raise FileNotFoundError("Missing emebddings from global model!")
+        
         if keypoint:
             keypoints = lb[:, 5:].reshape(-1, nkpt, ndim)
             if ndim == 2:
                 kpt_mask = np.where((keypoints[..., 0] < 0) | (keypoints[..., 1] < 0), 0.0, 1.0).astype(np.float32)
                 keypoints = np.concatenate([keypoints, kpt_mask[..., None]], axis=-1)  # (nl, nkpt, 3) 
         lb = lb[:, :5] if not location else lb[:, :4]   # if statement added for clarity; lb[:, :5] would work too
-        return im_file, lb, shape, segments, keypoints, nm, nf, ne, nc, msg
+        return im_file, lb, ep, eg, shape, segments, keypoints, nm, nf, ne, nc, msg
     except Exception as e:
         nc = 1
         msg = f"{prefix}WARNING ⚠️ {im_file}: ignoring corrupt image/label: {e}"
-        return [None, None, None, None, None, nm, nf, ne, nc, msg]
+        return [None, None, None, None, None, None, None, nm, nf, ne, nc, msg]
 
 
 def polygon2mask(imgsz, polygons, color=1, downsample_ratio=1):

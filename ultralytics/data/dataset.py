@@ -79,7 +79,7 @@ class YOLODataset(BaseDataset):
                 ),
             )
             pbar = TQDM(results, desc=desc, total=total)
-            for im_file, lb, shape, segments, keypoint, nm_f, nf_f, ne_f, nc_f, msg in pbar:
+            for im_file, lb, ep, eg, shape, segments, keypoint, nm_f, nf_f, ne_f, nc_f, msg in pbar:
                 nm += nm_f
                 nf += nf_f
                 ne += ne_f
@@ -93,6 +93,8 @@ class YOLODataset(BaseDataset):
                             bboxes=lb[:, 1:] if not self.use_locations else None,  # n, 4
                             radii=lb[:, 1:2] if self.use_locations else None,
                             locations=lb[:, 2:] if self.use_locations else None,  # n, 2
+                            embds_prev=ep,
+                            embds_glob=eg,
                             segments=segments,
                             keypoints=keypoint,
                             normalized=True,
@@ -118,7 +120,7 @@ class YOLODataset(BaseDataset):
         """Returns dictionary of labels for YOLO training."""
         self.label_files = img2label_paths(self.im_files)
         self.embds_prev = img2prevEmbd_paths(self.im_files)
-        self.embds_glob = img2globEmbd_paths(self.img_path)
+        self.embds_glob = img2globEmbd_paths(self.im_files)
         cache_path = Path(self.label_files[0]).parent.with_suffix(".cache")
         try:
             cache, exists = load_dataset_cache_file(cache_path), True  # attempt to load a *.cache file

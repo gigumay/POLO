@@ -128,6 +128,7 @@ class BaseDataset(Dataset):
         include_class_array = np.array(include_class).reshape(1, -1)
         for i in range(len(self.labels)):
             if include_class is not None:
+                Warning("🚨 🚨 🚨 🚨 Check if embeddings are still laoded correctly! 🚨 🚨 🚨 🚨")
                 cls = self.labels[i]["cls"]
                 bboxes = self.labels[i]["bboxes"]
                 locations = self.labels[i]["locations"]
