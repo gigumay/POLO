@@ -14,7 +14,7 @@ from ultralytics.utils import LOCAL_RANK, NUM_THREADS, TQDM, colorstr, is_dir_wr
 from ultralytics.utils.ops import resample_segments
 from .augment import Compose, Format, Instances, LetterBox, classify_augmentations, classify_transforms, v8_transforms, v8_transforms_loc
 from .base import BaseDataset
-from .utils import HELP_URL, LOGGER, get_hash, img2label_paths, verify_image, verify_image_label
+from .utils import HELP_URL, LOGGER, get_hash, img2label_paths, img2prevEmbd_paths, img2globEmbd_paths, verify_image, verify_image_label
 
 # Ultralytics dataset *.cache version, >= 1.0.0 for YOLOv8
 DATASET_CACHE_VERSION = "1.0.3"
@@ -68,6 +68,8 @@ class YOLODataset(BaseDataset):
                 iterable=zip(
                     self.im_files,
                     self.label_files,
+                    self.embds_prev,
+                    self.embds_glob,
                     repeat(self.prefix),
                     repeat(self.use_keypoints),
                     repeat(self.use_locations),
@@ -115,6 +117,8 @@ class YOLODataset(BaseDataset):
     def get_labels(self):
         """Returns dictionary of labels for YOLO training."""
         self.label_files = img2label_paths(self.im_files)
+        self.embds_prev = img2prevEmbd_paths(self.im_files)
+        self.embds_glob = img2globEmbd_paths(self.img_path)
         cache_path = Path(self.label_files[0]).parent.with_suffix(".cache")
         try:
             cache, exists = load_dataset_cache_file(cache_path), True  # attempt to load a *.cache file
