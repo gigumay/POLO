@@ -72,6 +72,9 @@ class LocalizationTrainer(BaseTrainer):
                 ]  # new shape (stretched to gs-multiple)
                 imgs = nn.functional.interpolate(imgs, size=ns, mode="bilinear", align_corners=False)
             batch["img"] = imgs
+
+        batch["embds_prev"] = batch["embds_prev"].to(self.device, non_blocking=True)
+        batch["embds_glob"] = batch["embds_glob"].to(self.device, non_blocking=True)
         return batch
 
     def set_model_attributes(self):
@@ -94,7 +97,7 @@ class LocalizationTrainer(BaseTrainer):
 
     def get_validator(self):
         """Returns a LocalizationValidator for YOLO model validation."""
-        self.loss_names = "loc_loss", "cls_loss"
+        self.loss_names = "loc_loss", "cls_loss", "moon_loss"
         return yolo.locate.LocalizationValidator(
             self.test_loader, save_dir=self.save_dir, args=copy(self.args), _callbacks=self.callbacks
         )

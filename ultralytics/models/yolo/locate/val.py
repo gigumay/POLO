@@ -59,6 +59,9 @@ class LocalizationValidator(BaseValidator):
         for k in ["batch_idx", "cls", "locations", "radii"]:
             batch[k] = batch[k].to(self.device)
 
+        batch["embds_prev"] = batch["embds_prev"].to(self.device, non_blocking=True)
+        batch["embds_glob"] = batch["embds_glob"].to(self.device, non_blocking=True)
+        
         if self.args.save_hybrid:
             height, width = batch["img"].shape[2:]
             nb = len(batch["img"])
