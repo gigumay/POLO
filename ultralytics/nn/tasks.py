@@ -261,9 +261,9 @@ class BaseModel(nn.Module):
             self.criterion = self.init_criterion()
 
         preds = self.forward(batch["img"]) if preds is None else preds
-        # extract embeddings of previous to last layer
-        embds = torch.stack(self.forward(batch["img"], embed=[len(self.model) - 2]), 0)
-        return self.criterion(preds, batch)
+        # extract embeddings
+        embds_curr = torch.stack(self.forward(batch["img"], embed=[len(self.model) - 2]), 0)
+        return self.criterion(preds, batch, embds_curr)
 
     def init_criterion(self):
         """Initialize the loss criterion for the BaseModel."""

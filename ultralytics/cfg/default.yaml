@@ -103,6 +103,8 @@ warmup_bias_lr: 0.1 # (float) warmup initial bias lr
 box: 7.5 # (float) box loss gain
 loc: 1.0 # (float) loc loss gain
 cls: 9.0 # (float) cls loss gain (scale with pixels)
+moon: 1.0 # (float) moon loss gain
+tau_moon: 0.5 # (float) temperature for contrastive moon loss
 dfl: 1.5 # (float) dfl loss gain
 pose: 12.0 # (float) pose loss gain
 kobj: 1.0 # (float) keypoint obj loss gain
