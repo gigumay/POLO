@@ -4,6 +4,7 @@ __version__ = "8.1.19"
 
 from ultralytics.data.explorer.explorer import Explorer
 from ultralytics.models import RTDETR, SAM, YOLO, YOLOWorld
+from ultralytics.nn.tasks import LocalizationModel, DetectionModel
 from ultralytics.models.fastsam import FastSAM
 from ultralytics.models.nas import NAS
 from ultralytics.utils import ASSETS, SETTINGS as settings
@@ -23,4 +24,6 @@ __all__ = (
     "download",
     "settings",
     "Explorer",
+    "LocalizationModel",
+    "DetectionModel"
 )
