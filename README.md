@@ -20,7 +20,7 @@ to your script. This will not only give you access to POLO, but also to all YOLO
 
 ### Data-preprocessing
 
-Datsets should be divided into a training- and validation-set, which should be stored in separate folders. Furthermore, like is the case for YOLOv8, the architecture of POLO is designed to take input images of size 640x640 pixels. If you are working with images that exceed this size, it can be beneficial to split them into patches that match the dimensions expected by POLO. While the framework will accept arbitrary sized inputs, large images will have to be downsampled to fit the architecture, which will reduce the resolution and may cause the loss of important features/details.
+Datsets should be divided into a training- and validation-set, which should be stored in separate folders. Furthermore, like is the case for YOLOv8, the architecture of POLO is designed to take input images of size 640x640 pixels. If you are working with images that exceed this size, it can be beneficial to split them into patches that match the dimensions expected by POLO. While the framework will accept arbitrary sized inputs, [image tiling has proven beneficial for small object detection](https://openaccess.thecvf.com/content_CVPRW_2019/papers/UAVision/Unel_The_Power_of_Tiling_for_Small_Object_Detection_CVPRW_2019_paper.pdf).
 Also, for each image (or image-patch) in the training- and validation-set, the objects it contains must be specified as ground truth labels in a `.txt`-file. The `.txt`-files must be located in the same folder as the corresponding images, and the file-names must be identical (except, of course, for the file extension/format). In the `.txt`-file each object must be defined as a point in a separate line, and every line must be formatted as follows:
 
 `class_id radius x_rel y_rel`
@@ -90,19 +90,14 @@ from ultralytics import YOLO
 model = YOLO("polov8n.yaml")
 ```
 
-Like YOLOv8, POLO comes in different sizes: n, s, m, l, and x. POLOv8x is the largest and most powerful model, but also needs the most memory and takes the longest to train. You can load whichever version you prefer simply by replacing the `n` in `"polov8n.yaml"` with one of the aforementioned letters. Furthermore, the above code snippet will load a randomly initialized POLO model. Another option is to initialize the model with the weights of a YOLOv8 model that was pre-trained on a large image set, which should help POLO extract better features and converge quicker. To do so, please run:
+Like YOLOv8, POLO comes in different sizes: n, s, m, l, and x. POLOv8x is the largest and most powerful model, but also needs the most memory and takes the longest to train. You can load whichever version you prefer simply by replacing the `n` in `"polov8n.yaml"` with one of the aforementioned letters:
 
 ```
 from ultralytics import YOLO
 from ultralytics.utils.torch_utils import intersect_dicts
 
 model = YOLO("polov8n.yaml")
-ckpt = YOLO(f"yolov8n.pt").state_dict()
-intersect = intersect_dicts(ckpt, model.state_dict())
-model.load_state_dict(intersect, strict=False)
 ```
-
-Note that this weight transfer only applies to the parameters that POLO shares with YOLO. However, since the only architectural difference between the models lies in their heads (i.e., the final convolutional layers) this will include most of the weights.
 
 Once the model is loaded, training can be started with one line:
 
@@ -133,7 +128,7 @@ POLO will produce a number of outputs during training, including visualizations 
 
 ## Validation
 
-In terms of code, validating POLO works exactly like validating YOLOv8, which is explained [here](https://docs.ultralytics.com/modes/val/). Conceptually however, the POLO framework measures evaluation metrics such as precision and recall based on the DoR instead of the IoU. More specifically, in YOLOv8 (or generally in bounding-box based object detectors) a prediction is counted as a true positive, if the predicted class is correct, and the predicted bounding box overlaps to a certain degree with the ground truth label. Here, the degree of overlap is measured via the IoU metric. With POLO on the other hand, a prediction is counted as a true positive, if the classes match and the predicted point is sufficiently close to the ground truth, as measured via the DoR. This definition of a true positive allows for the calculation of precision and recall like it is done for YOLOv8, as well as it enables us to define thee `mAP100` and `mAP100-10` metrics. The latter are computed in the same way as the `mAP50` and `mAP50-95` metrics in bounding-box detection, but instead of measuirng a model's accuracy at different IoU thresholds (see [here](https://docs.ultralytics.com/guides/yolo-performance-metrics/#interpreting-the-output) for a more thorough explanation), the performance is assessed depending on the DoR value.
+In terms of code, validating POLO works exactly like validating YOLOv8, which is explained [here](https://docs.ultralytics.com/modes/val/). Conceptually however, the POLO framework measures evaluation metrics such as precision and recall based on the DoR instead of the IoU. More specifically, in YOLOv8 (or generally in bounding-box based object detectors) a prediction is counted as a true positive, if the predicted class is correct, and the predicted bounding box overlaps to a certain degree with the ground truth label. Here, the degree of overlap is measured via the IoU metric. With POLO on the other hand, a prediction is counted as a true positive, if the classes match and the predicted point is sufficiently close to the ground truth, as measured via the DoR. This definition of a true positive allows for the calculation of precision and recall like it is done for YOLOv8, as well as it enables us to define thee `mAP100` and `mAP100-10` metrics. The latter are computed in the same way as the `mAP50` and `mAP50-95` metrics in bounding-box detection, but instead of measuirng a model's accuracy at different IoU thresholds (see [here](https://docs.ultralytics.com/guides/yolo-performance-metrics/#interpreting-the-output) for a more thorough explanation), the performance is assessed based on the DoR value.
 It is possible to validate with a DoR threshold and radii that differ from what was used for training. To do so, simply pass a floating point value and a dictionary containing a new radius value for each class ID when calling the validation function. Assuming that the `model` variable holds a trained POLO model:
 
 ```
@@ -142,11 +137,11 @@ new_dor = 0.8
 model.val(radii=new_radii, dor=new_dor)
 ```
 
-If these parameters are not set, the model will use the default values specified in the [configuration file](./ultralytics/cfg/default.yaml).
+If these parameters are not set, the model will use the default values specified in the [configuration file](./ultralytics/cfg/default.yaml) (DoR threshold = 0.3, radii as used during training).
 
 ## Inference
 
-Performing inference on a set of images (or image patches) for which there is no ground truth works exactly the same as with YOLOv8 (no new/additional parameters), and we therefore point towards the [official ultralytics docs](https://docs.ultralytics.com/modes/predict/) for details.
+Performing inference on a set of images (or image patches) for which there is no ground truth works exactly the same as with YOLOv8 (no new/additional parameters), and we therefore point towards the [official ultralytics docs](https://docs.ultralytics.com/modes/predict/) for details. Note that you will have to pass the radii used during training (or different ones if you so wish) during inference.
 
 ## Closing remarks & missing functionalities
 
@@ -161,7 +156,7 @@ As mentioned earlier, this package gives users access not only to the POLO model
 5. `height_rel`: The relative height of the bounding box (i.e., its height in pixels divided by the image height).
 
 
-When training YOLO models with the original ultralytics package, users will be prompted to log into weights&biases and a project will be created to monitor training and validation. This feature is missing for POLO, but may be implemented in the future.
+When training YOLO models with the original ultralytics package, users will be prompted to log into weights&biases and a project will be created to monitor training and validation. This feature is missing for POLO, but may be implemented in the future. Pretrained POLO-models are currently unavailable, too.
 
 ## Contact
 

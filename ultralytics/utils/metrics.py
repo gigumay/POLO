@@ -349,8 +349,6 @@ def euclid_dist(loc1, loc2, eps=1e-7):
 
 
 
-
-
 class ConfusionMatrix:
     """
     A class for calculating and updating a confusion matrix for object detection, localization, and classification tasks.
@@ -384,6 +382,7 @@ class ConfusionMatrix:
         preds, targets = torch.cat(preds)[:, 0], torch.cat(targets)
         for p, t in zip(preds.cpu().numpy(), targets.cpu().numpy()):
             self.matrix[p][t] += 1
+
 
     def process_batch(self, detections, gt_bboxes, gt_cls):
         """
