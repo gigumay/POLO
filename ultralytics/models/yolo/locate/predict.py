@@ -3,6 +3,7 @@
 from ultralytics.engine.predictor import BasePredictor
 from ultralytics.engine.results import Results
 from ultralytics.utils import DEFAULT_CFG, ops
+from ultralytics.data.utils import check_det_dataset
 
 
 class LocalizationPredictor(BasePredictor):
@@ -21,10 +22,16 @@ class LocalizationPredictor(BasePredictor):
     """
     def __init__(self, cfg=DEFAULT_CFG, overrides=None, _callbacks=None):
         """Initializes the SegmentationPredictor with the provided configuration, overrides, and callbacks."""
-        self.radii = overrides.pop("radii")
+        radii = None if "radii" not in overrides else overrides.pop("radii")
 
         super().__init__(cfg, overrides, _callbacks)
         self.args.task = "locate"
+
+        if radii is None:
+            data = check_det_dataset(dataset=self.data)
+            radii = data["radii"]
+
+        self.radii = radii
 
     def postprocess(self, preds, img, orig_imgs):
         """Post-processes predictions and returns a list of Results objects."""

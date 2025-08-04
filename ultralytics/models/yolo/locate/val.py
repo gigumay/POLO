@@ -29,16 +29,9 @@ class LocalizationValidator(BaseValidator):
     """
     def __init__(self, dataloader=None, save_dir=None, pbar=None, args=None, _callbacks=None):
         """Initialize detection model with necessary variables and settings."""
-        if "radii" in args:
-            radii = args.pop("radii")
-        else:
-            radii = None
+        radii = None if "radii" not in args else args.pop("radii")
+        dor = None if "dor" not in args else args.pop("dor")
         
-        if "dor" in args:
-            dor = args.pop("dor")
-        else:
-            dor = None
-
         super().__init__(dataloader, save_dir, pbar, args, _callbacks)
         self.nt_per_class = None
         self.is_coco = False
