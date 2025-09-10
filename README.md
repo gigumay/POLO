@@ -141,7 +141,7 @@ If these parameters are not set, the model will use the default values specified
 
 ## Inference
 
-Performing inference on a set of images (or image patches) for which there is no ground truth works exactly the same as with YOLOv8 (no new/additional parameters), and we therefore point towards the [official ultralytics docs](https://docs.ultralytics.com/modes/predict/) for details. You can choose to specifify the DoR-threshold and radii in the same way it is done for model validation. Again, the values default to the radii used during training and the DoR specified  in the [configuration file](./ultralytics/cfg/default.yaml). 
+Performing inference on a set of images (or image patches) for which there is no ground truth works exactly the same as with YOLOv8 (no new/additional parameters), and we therefore point towards the [official ultralytics docs](https://docs.ultralytics.com/modes/predict/) for details. You can choose to specifify the DoR-threshold and radii in the same way it is done for model validation. Again, the values default to the radii used during training and the DoR specified  in the [configuration file](./ultralytics/cfg/default.yaml).  For an example on how to eprform tiled inference using `POLO`, please refer to `./examples/POLO_tiled_inference`.
 
 ## Closing remarks & missing functionalities
 
