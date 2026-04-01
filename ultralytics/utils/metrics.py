@@ -456,7 +456,8 @@ class ConfusionMatrix:
             gt_cls (Array[M]): The class labels.
             radii (Array[M]): The raidus values for the classes.
         """
-        assert len(gt_cls.shape) == 1
+        if len(gt_cls.shape) != 1:
+            assert gt_cls.shape[0] == 0, "Tensor gt_cls should be empty if it's more than 1D"
 
         if gt_cls.shape[0] == 0:  # Check if labels is empty
             if localizations is not None:
