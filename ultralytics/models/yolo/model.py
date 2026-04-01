@@ -15,7 +15,7 @@ class YOLO(Model):
     def __init__(self, model="yolov8n.pt", task=None, verbose=False):
         """Initialize YOLO model, switching to YOLOWorld if model filename contains '-world'."""
         stem = Path(model).stem  # filename stem without suffix, i.e. "yolov8n"
-        torch.add_safe_globals([LocalizationModel])
+        torch.serialization.add_safe_globals([LocalizationModel])
         if "-world" in stem:
             new_instance = YOLOWorld(model)
             self.__class__ = type(new_instance)
