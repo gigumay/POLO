@@ -14,7 +14,9 @@ Since the POLO package is a fork of the ultralytics library, the model can be im
 
 `from ultralytics import YOLO`
 
-to your script. This will not only give you access to POLO, but also to all YOLO models and functionalities (YOLOv3-8, pose-estimation, segmentation, etc.). For instructions on anything that extends beyond POLO, please consult the official [ultralytics documentation](https://docs.ultralytics.com). Note that POLO was developed in python 3.10, which therefore is the version we reccomend using when working with this package.
+to your script. This will not only give you access to POLO, but also to all YOLO models and functionalities (YOLOv3-8, pose-estimation, segmentation, etc.). For instructions on anything that extends beyond POLO, please consult the official [ultralytics documentation](https://docs.ultralytics.com). POLO requires `python 3.10`, and `torchvision 0.17.1`.
+
+
 
 ## Training POLO
 
